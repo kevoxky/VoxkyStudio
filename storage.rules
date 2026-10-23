@@ -1,0 +1,14 @@
+// Reglas de seguridad de Firebase Storage para VoxkyStudio.
+// Solo permiten subir archivos de imagen de hasta 10 MB dentro de la carpeta referencias/{proyectoId}/.
+
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /referencias/{proyectoId}/{nombreArchivo} {
+      allow read: if true;
+      allow write: if request.resource.size <= 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+  }
+}

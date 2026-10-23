@@ -12,7 +12,12 @@ Sirve para que tú solo tengas que escribir la idea de un video, elegir si lo qu
 
 ## (b) ¿Cómo funciona, paso a paso y con ejemplos de la vida diaria?
 Imagina que entras a una agencia de cine real:
-1. **La Mesa de Entrada (Recepción):** Llegas a una mesa limpia donde entregas una hoja con tu idea escrita, dices si el video será vertical u horizontal y dejas hasta 4 fotografías sobre la mesa para que el equipo sepa cómo luce tu personaje o producto.
+1. **La Mesa de Entrada (Barra de Comando Unificada):** Llegas a una gran tarjeta blanca donde arriba escribes la idea de tu video y ves las miniaturas de todas las fotos de referencia que quieras adjuntar (ya sin límite de 4 fotos). Abajo, dentro de la misma caja, tienes todos los controles en forma de píldoras:
+   - **Botón `+`**: Para adjuntar fotos de personajes, productos o estilos.
+   - **Formato**: `16:9` (YouTube/Cine), `9:16` (TikTok/Reels), `1:1` (Cuadrado), `4:5` (Retrato), `4:3` (Clásico) o `21:9` (Ultra Panorámico).
+   - **Duración (`duracionObjetivo` + `toleranciaFlexible: true`)**: Por defecto en **Auto**, o tiempos como `15 seg`, `30 seg`, `1 min`, `3 min`, `5 min`, `10 min` o **Custom** (eligiendo el número y si son segundos o minutos, ej. `Custom: 7 min`). Lleva activada la regla de **tolerancia flexible** para que el futuro Agente Guionista tome el tiempo como guía natural y jamás corte una frase o idea a la mitad.
+   - **Modelo de Imagen y Modelo de Video (en `fal.ai`)**: Dos píldoras azul claro para elegir con qué motor crear las imágenes (`FLUX.1 Pro Ultra`, `FLUX.1 Dev`, `FLUX.1 Schnell`, `Google Imagen 4`) y con cuál generar el video (`Kling v3 Pro`, `LTX-2.3 Pro`, `Wan 2.7 Reference`, `Veo 3`, `Seedance 2.5`, `MiniMax H3 Max`). Los modelos auxiliares de voz, análisis de visión/audio, sincronización de labios (LipSync) y mejora de calidad (Upscaling) quedan guardados internamente (`MODELOS_INTERNOS_POR_DEFECTO`) sin ensuciar la pantalla.
+   - **Idioma de salida (`idiomaSalida`) y botón circular `↑`**: En la esquina inferior derecha eliges el idioma final del video (`Español`, `English`, `Français`, `Português`, `Italiano`, `Deutsch`). **Regla clave:** este idioma manda sobre el idioma en el que escribas tu idea; aunque escribas tu prompt en Español, si eliges `English`, todas las voces, diálogos y textos del video saldrán en Inglés.
 2. **El Archivo Fotográfico (`Firebase Storage` — un casillero digital en la nube para guardar fotos y videos):** Cuando presionas el botón **"Comenzar Producción"**, la recepcionista muestra el cartel *"Preparando tu estudio..."*, toma tus fotos, las guarda en una carpeta con el número de tu proyecto (`referencias/{proyectoId}/`) y anota la dirección web permanente de cada foto.
 3. **La Ficha Maestra (`Firebase Firestore` — un cuaderno en la nube que se actualiza en vivo):** Con los enlaces de tus fotos listos, se crea una ficha oficial dentro del archivero llamado `proyectos`. Esa ficha guarda 5 datos: tu idea (`ideaOriginal`), el formato (`9:16` o `16:9`), los enlaces de tus fotos (`imagenesReferencia`), el estado actual (`analizando_idea`) y la hora exacta (`fechaCreacion`).
 4. **El Puente Secreto (`Proxy de fal.ai` — un mensajero privado del servidor):** Para que nadie que visite tu página web pueda ver ni robar tu llave secreta de inteligencia artificial (`FAL_KEY`), el navegador nunca habla directo con `fal.ai`. En su lugar, le pide todo a nuestro mensajero interno (`/api/fal/proxy`), quien pone la llave en secreto desde el servidor.
@@ -40,6 +45,17 @@ Imagina que entras a una agencia de cine real:
 ---
 
 ## (d) ¿Qué se ha hecho hasta ahora? (Diario de sesiones)
+### Sesión del 23 de octubre de 2026 (Perfiles Rápido/Pro/Máximo con precios reales en USD y Tooltips)
+- Se consultaron en directo los precios oficiales mediante el MCP de `fal.ai` y se agregaron las fichas técnicas de cada modelo de imagen y video (calidad, precio real por imagen o segundo, y velocidad).
+- Se creó el nuevo selector desplegable con **Tarjeta de Información (Hover Card)** a la derecha que muestra Calidad, Precio Real y Velocidad al pasar el mouse sobre cada modelo.
+- Se añadió debajo de la caja principal la **barra flotante translúcida** con los botones **⚡ Rápido**, **👑 Pro** y **✨ Máximo**, que ajustan los motores automáticamente y calculan en vivo tanto el costo por minuto (`$/min`) como el **costo total aproximado de tu video** según la duración elegida.
+
+### Sesión del 23 de octubre de 2026 (Conexión real de Firebase y MCP de fal.ai + Firebase)
+- Se creó en tu cuenta de Google/Firebase el proyecto exclusivo **VoxkyStudio** (`voxkystudio`) y su aplicación web.
+- Se completó automáticamente tu archivo `.env` con las 6 claves de Firebase (`NEXT_PUBLIC_FIREBASE_*`) junto a tu `FAL_KEY`.
+- Se creó la base de datos **Cloud Firestore** en la nube y se subieron sus reglas de seguridad (`firestore.rules`).
+- Se conectaron los dos enchufes **MCP (`firebase` y `fal-ai`)** en tu editor Antigravity (`mcp_config.json`).
+
 ### Sesión del 23 de octubre de 2026 (Tema en colores claros y respaldo en GitHub)
 - Se cambió toda la interfaz de la Mesa de Entrada y de la Sala de Estudio a una paleta de colores claros (blanco limpio, grises suaves y botones resaltados en índigo).
 - Se guardó el avance en Git y se conectó y subió al repositorio en la nube (`https://github.com/kevoxky/VoxkyStudio.git`), protegiendo el archivo `.env` para que nunca se suba.

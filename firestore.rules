@@ -1,0 +1,18 @@
+// Reglas de seguridad de Firebase Firestore para VoxkyStudio.
+// Permiten leer y crear fichas maestras válidas dentro de la colección "proyectos" con los 6 formatos soportados.
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /proyectos/{proyectoId} {
+      allow read: if true;
+      allow create: if request.resource.data.ideaOriginal is string
+                    && request.resource.data.ideaOriginal.size() >= 5
+                    && request.resource.data.ideaOriginal.size() <= 3000
+                    && request.resource.data.formato in ['16:9', '9:16', '1:1', '4:5', '4:3', '21:9']
+                    && request.resource.data.estado == 'analizando_idea';
+      allow update: if true;
+    }
+  }
+}

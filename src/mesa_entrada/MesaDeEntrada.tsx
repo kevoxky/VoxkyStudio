@@ -1,5 +1,5 @@
-// Interfaz principal en colores claros de la Parte 1 (Mesa de Entrada): un único contenedor centrado con los 4 elementos esenciales.
-// Se conecta con SelectorFormatoVideo.tsx, ZonaImagenesReferencia.tsx, crear_documento_proyecto.ts y redirige a /estudio/[id].
+// Interfaz de la Mesa de Entrada (Paso 1) con barra de comando unificada, selectores con Tooltip y cápsula inferior de precios en USD.
+// Se conecta con SelectorFormatoVideo.tsx, SelectorModeloConTooltip.tsx, ZonaImagenesReferencia.tsx y crear_documento_proyecto.ts.
 
 "use client";
 
@@ -7,20 +7,42 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { obtenerClienteFalSeguro } from "@/configuracion/cliente_fal";
 import {
-  FORMATO_VERTICAL,
-  FormatoVideo,
+  DURACION_POR_DEFECTO,
+  FORMATO_HORIZONTAL,
+  type FormatoVideo,
+  IDIOMAS_SALIDA_PERMITIDOS,
+  IDIOMA_SALIDA_POR_DEFECTO,
+  type IdiomaSalidaVideo,
+  MODELOS_IMAGEN_FAL,
+  MODELOS_VIDEO_FAL,
+  MODELO_IMAGEN_POR_DEFECTO,
+  MODELO_VIDEO_POR_DEFECTO,
+  PERFILES_PRODUCCION_CALIDAD,
+  type PerfilProduccionCalidad,
   TEXTO_BOTON_COMENZAR,
   TEXTO_CARGA_ESTUDIO,
+  TOLERANCIA_FLEXIBLE_POR_DEFECTO,
 } from "./constantes_mesa_entrada";
-import { SelectorFormatoVideo } from "./SelectorFormatoVideo";
 import {
-  ImagenConVistaPrevia,
-  ZonaImagenesReferencia,
+  SelectorDuracionVideo,
+  SelectorFormatoVideo,
+} from "./SelectorFormatoVideo";
+import { SelectorModeloConTooltip } from "./SelectorModeloConTooltip";
+import {
+  BotonAdjuntarImagenes,
+  FilaMiniaturasReferencia,
+  type ImagenConVistaPrevia,
+  agregarImagenesReferenciaValidas,
 } from "./ZonaImagenesReferencia";
+import {
+  calcularCostoPorMinutoUSD,
+  calcularPresupuestoTotalUSD,
+  detectarModoCalidad,
+} from "./validar_entrada_proyecto";
 import { crearProyectoEnFirestore } from "./crear_documento_proyecto";
 
 /**
- * Muestra el contenedor centrado en tonos claros de la Mesa de Entrada, coordina el guardado en Firebase y redirige al estudio.
+ * Muestra la Mesa de Entrada con la tarjeta de comando unificada, perfiles Rápido/Pro/Máximo y cálculo de presupuesto en vivo.
  * No recibe propiedades externas y devuelve la pantalla principal interactiva.
  */
 export function MesaDeEntrada() {
@@ -28,21 +50,70 @@ export function MesaDeEntrada() {
 
   const [ideaOriginal, setIdeaOriginal] = useState<string>("");
   const [formatoSeleccionado, setFormatoSeleccionado] =
-    useState<FormatoVideo>(FORMATO_VERTICAL);
+    useState<FormatoVideo>(FORMATO_HORIZONTAL);
+  const [duracionObjetivo, setDuracionObjetivo] =
+    useState<string>(DURACION_POR_DEFECTO);
+  const [modeloImagen, setModeloImagen] = useState<string>(
+    MODELO_IMAGEN_POR_DEFECTO
+  );
+  const [modeloVideo, setModeloVideo] = useState<string>(
+    MODELO_VIDEO_POR_DEFECTO
+  );
+  const [idiomaSalida, setIdiomaSalida] = useState<IdiomaSalidaVideo>(
+    IDIOMA_SALIDA_POR_DEFECTO
+  );
   const [imagenesCargadas, setImagenesCargadas] = useState<
     ImagenConVistaPrevia[]
   >([]);
+  const [arrastrandoArchivos, setArrastrandoArchivos] =
+    useState<boolean>(false);
   const [estaGuardando, setEstaGuardando] = useState<boolean>(false);
   const [mensajeError, setMensajeError] = useState<string | null>(null);
 
-  // Al abrir la aplicación, configuramos el puente seguro de fal.ai hacia /api/fal/proxy
+  // Cálculo dinámico en tiempo real del modo, costo por minuto y presupuesto total según la duración
+  const modoCalidadActual = detectarModoCalidad(modeloImagen, modeloVideo);
+  const costoEstimadoPorMinutoUSD = calcularCostoPorMinutoUSD(
+    modeloImagen,
+    modeloVideo
+  );
+  const presupuestoTotalEstimadoUSD = calcularPresupuestoTotalUSD(
+    costoEstimadoPorMinutoUSD,
+    duracionObjetivo
+  );
+
+  // Configuramos el túnel seguro de fal.ai hacia /api/fal/proxy al cargar la página
   useEffect(() => {
     obtenerClienteFalSeguro();
   }, []);
 
   /**
-   * Se ejecuta al presionar "Comenzar Producción": sube las fotos, guarda el proyecto en Firestore y redirige.
-   * Recibe el evento del formulario y navega automáticamente a /estudio/[id].
+   * Aplica automáticamente la pareja de Modelo de Imagen y Modelo de Video al elegir Rápido, Pro o Máximo.
+   * Recibe el perfil elegido por el usuario y actualiza los selectores y el costo en vivo.
+   */
+  function aplicarPerfilDeCalidad(perfil: PerfilProduccionCalidad) {
+    setModeloImagen(perfil.idModeloImagen);
+    setModeloVideo(perfil.idModeloVideo);
+  }
+
+  /**
+   * Elimina una imagen adjunta de la fila superior cuando el usuario pulsa su botón "✕".
+   * Recibe la posición de la imagen en la fila y libera su vista previa temporal.
+   */
+  function quitarImagenPorIndice(indiceAQuitar: number) {
+    const imagenAQuitar = imagenesCargadas[indiceAQuitar];
+    if (imagenAQuitar) {
+      URL.revokeObjectURL(imagenAQuitar.urlVistaPrevia);
+    }
+
+    setImagenesCargadas(
+      imagenesCargadas.filter((_, indice) => indice !== indiceAQuitar)
+    );
+    setMensajeError(null);
+  }
+
+  /**
+   * Se ejecuta al pulsar el botón circular de envío (↑): guarda fotos, modelos y presupuesto en Firebase y abre /estudio/[id].
+   * Recibe el evento del formulario y navega automáticamente a la sala del estudio.
    */
   async function manejarEnvioProduccion(
     evento: React.FormEvent<HTMLFormElement>
@@ -57,10 +128,17 @@ export function MesaDeEntrada() {
       const nuevoProyectoId = await crearProyectoEnFirestore({
         ideaOriginal,
         formato: formatoSeleccionado,
+        duracionObjetivo,
+        toleranciaFlexible: TOLERANCIA_FLEXIBLE_POR_DEFECTO,
+        modeloImagen,
+        modeloVideo,
+        modoCalidad: modoCalidadActual,
+        costoEstimadoPorMinutoUSD,
+        presupuestoTotalEstimadoUSD,
+        idiomaSalida,
         archivosReferencia: archivosParaSubir,
       });
 
-      // Redirigimos automáticamente a la vista del estudio en tiempo real
       enrutador.push(`/estudio/${nuevoProyectoId}`);
     } catch (error) {
       const textoExplicativo =
@@ -74,86 +152,242 @@ export function MesaDeEntrada() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100 text-slate-900 flex items-center justify-center p-4 sm:p-6">
-      {/* Único contenedor centrado de la Mesa de Entrada en colores claros */}
-      <section className="w-full max-w-2xl rounded-2xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-xl shadow-slate-200/70">
-        <header className="mb-6 text-center">
-          <span className="inline-block rounded-full bg-indigo-50 border border-indigo-200 px-3 py-1 text-xs font-semibold text-indigo-700 mb-2">
+    <main className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100 text-slate-900 flex flex-col items-center justify-center p-4 sm:p-6">
+      <div className="w-full max-w-4xl space-y-5">
+        <header className="text-center space-y-1.5">
+          <span className="inline-block rounded-full bg-indigo-50 border border-indigo-200 px-3 py-1 text-xs font-semibold text-indigo-700">
             VoxkyStudio · Mesa de Entrada
           </span>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
-            Nueva Producción Audiovisual
+          <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-slate-900">
+            ¿Qué video vamos a producir hoy?
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Describe tu idea, elige el formato y añade tus referencias visuales.
+          <p className="text-sm text-slate-500">
+            Escribe tu idea, adjunta tus referencias y ajusta los motores de tu
+            estudio en una sola barra.
           </p>
         </header>
 
-        <form onSubmit={manejarEnvioProduccion} className="space-y-6">
-          {/* Elemento 1: Caja de texto amplia donde el usuario escribe la idea de su video */}
-          <div className="space-y-2">
-            <label
-              htmlFor="idea-video"
-              className="block text-sm font-semibold text-slate-800"
-            >
-              1. Idea de tu video
-            </label>
+        {/* Gran tarjeta blanca redondeada estilo "barra de comando unificada" */}
+        <form
+          onSubmit={manejarEnvioProduccion}
+          onDragOver={(evento) => {
+            evento.preventDefault();
+            if (!estaGuardando) setArrastrandoArchivos(true);
+          }}
+          onDragLeave={() => setArrastrandoArchivos(false)}
+          onDrop={(evento) => {
+            evento.preventDefault();
+            setArrastrandoArchivos(false);
+            if (!estaGuardando) {
+              agregarImagenesReferenciaValidas(
+                imagenesCargadas,
+                evento.dataTransfer.files,
+                setImagenesCargadas,
+                setMensajeError
+              );
+            }
+          }}
+          className={`w-full rounded-3xl border bg-white p-4 sm:p-5 shadow-xl shadow-slate-200/80 transition-all ${
+            arrastrandoArchivos
+              ? "border-indigo-500 ring-4 ring-indigo-500/15 bg-indigo-50/20"
+              : "border-slate-200/90"
+          }`}
+        >
+          {/* PARTE SUPERIOR: Área de texto limpia y fila de miniaturas si hay fotos adjuntas */}
+          <div className="px-1">
+            <FilaMiniaturasReferencia
+              imagenesCargadas={imagenesCargadas}
+              alQuitarImagen={quitarImagenPorIndice}
+              deshabilitado={estaGuardando}
+            />
+
             <textarea
               id="idea-video"
-              rows={5}
+              rows={4}
               value={ideaOriginal}
               disabled={estaGuardando}
               onChange={(evento) => {
                 setIdeaOriginal(evento.target.value);
                 if (mensajeError) setMensajeError(null);
               }}
-              placeholder="Escribe aquí tu idea con detalle: de qué trata el video, qué atmósfera buscas, quién aparece y qué quieres transmitir..."
-              className="w-full rounded-xl border border-slate-300 bg-slate-50/60 p-4 text-sm sm:text-base text-slate-900 placeholder-slate-400 focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-3 focus:ring-indigo-500/15 disabled:opacity-50 resize-y transition-colors"
+              placeholder="Describe la idea de tu video, personajes, estilo visual o arrastra aquí tus imágenes de referencia..."
+              className="w-full border-0 bg-transparent py-2 text-base sm:text-lg text-slate-900 placeholder-slate-400 focus:outline-none disabled:opacity-50 resize-none"
             />
           </div>
 
-          {/* Elemento 2: Selector visual simple para elegir Vertical (9:16) u Horizontal (16:9) */}
-          <SelectorFormatoVideo
-            formatoSeleccionado={formatoSeleccionado}
-            alCambiarFormato={setFormatoSeleccionado}
-            deshabilitado={estaGuardando}
-          />
-
-          {/* Elemento 3: Zona para arrastrar y soltar hasta 4 imágenes de referencia con vista previa pequeña */}
-          <ZonaImagenesReferencia
-            imagenesCargadas={imagenesCargadas}
-            alCambiarImagenes={setImagenesCargadas}
-            alOcurrirError={setMensajeError}
-            deshabilitado={estaGuardando}
-          />
-
-          {/* Aviso claro en español si ocurre algún problema de validación o de conexión */}
           {mensajeError && (
             <div
               role="alert"
-              className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700"
+              className="mb-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs sm:text-sm font-medium text-red-700"
             >
               {mensajeError}
             </div>
           )}
 
-          {/* Elemento 4: Botón principal llamativo "Comenzar Producción" con indicador amigable de carga */}
-          <button
-            type="submit"
-            disabled={estaGuardando}
-            className="w-full rounded-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-600 hover:from-indigo-500 hover:via-violet-500 hover:to-indigo-500 text-white font-semibold py-4 px-6 text-base shadow-lg shadow-indigo-500/25 transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer disabled:opacity-75 disabled:cursor-wait"
-          >
-            {estaGuardando ? (
-              <>
-                <span className="h-5 w-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                <span>{TEXTO_CARGA_ESTUDIO}</span>
-              </>
-            ) : (
-              <span>{TEXTO_BOTON_COMENZAR}</span>
-            )}
-          </button>
+          {estaGuardando && (
+            <div className="mb-3 flex items-center gap-2.5 rounded-2xl border border-indigo-200 bg-indigo-50/80 px-4 py-2.5 text-xs sm:text-sm font-semibold text-indigo-800">
+              <span className="h-4 w-4 rounded-full border-2 border-indigo-300 border-t-indigo-700 animate-spin shrink-0" />
+              <span>{TEXTO_CARGA_ESTUDIO}</span>
+            </div>
+          )}
+
+          {/* PARTE INFERIOR: Barra de herramientas integrada dentro de la misma caja */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100">
+            {/* IZQUIERDA: Botón "+", Formato, Duración, Modelo de Imagen y Modelo de Video */}
+            <div className="flex flex-wrap items-center gap-2">
+              <BotonAdjuntarImagenes
+                alSeleccionarArchivos={(archivos) =>
+                  agregarImagenesReferenciaValidas(
+                    imagenesCargadas,
+                    archivos,
+                    setImagenesCargadas,
+                    setMensajeError
+                  )
+                }
+                deshabilitado={estaGuardando}
+              />
+
+              <SelectorFormatoVideo
+                formatoSeleccionado={formatoSeleccionado}
+                alCambiarFormato={setFormatoSeleccionado}
+                deshabilitado={estaGuardando}
+              />
+
+              <SelectorDuracionVideo
+                duracionObjetivo={duracionObjetivo}
+                alCambiarDuracion={setDuracionObjetivo}
+                deshabilitado={estaGuardando}
+              />
+
+              <SelectorModeloConTooltip
+                tipoIcono="imagen"
+                etiquetaAria="Modelo de Imagen en fal.ai"
+                modelosDisponibles={MODELOS_IMAGEN_FAL}
+                idModeloSeleccionado={modeloImagen}
+                alSeleccionarModelo={setModeloImagen}
+                deshabilitado={estaGuardando}
+              />
+
+              <SelectorModeloConTooltip
+                tipoIcono="video"
+                etiquetaAria="Modelo de Video en fal.ai"
+                modelosDisponibles={MODELOS_VIDEO_FAL}
+                idModeloSeleccionado={modeloVideo}
+                alSeleccionarModelo={setModeloVideo}
+                deshabilitado={estaGuardando}
+              />
+            </div>
+
+            {/* DERECHA: Selector de Idioma de salida y botón circular de envío "↑" */}
+            <div className="flex items-center gap-2 ml-auto">
+              <div className="relative inline-flex items-center">
+                <select
+                  aria-label="Idioma de salida del video"
+                  value={idiomaSalida}
+                  disabled={estaGuardando}
+                  onChange={(evento) =>
+                    setIdiomaSalida(evento.target.value as IdiomaSalidaVideo)
+                  }
+                  title="Idioma final de diálogos, voces y textos del video (manda sobre el idioma del prompt)"
+                  className="appearance-none rounded-full border border-slate-200 bg-slate-50 hover:bg-slate-100 pl-3.5 pr-7 py-1.5 text-xs font-semibold text-slate-700 focus:border-indigo-500 focus:bg-white focus:outline-none cursor-pointer disabled:opacity-50 transition-colors"
+                >
+                  {IDIOMAS_SALIDA_PERMITIDOS.map((idioma) => (
+                    <option key={idioma} value={idioma}>
+                      {idioma}
+                    </option>
+                  ))}
+                </select>
+
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  className="w-3.5 h-3.5 text-slate-500 absolute right-2.5 pointer-events-none"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </div>
+
+              <button
+                type="submit"
+                disabled={estaGuardando}
+                title={TEXTO_BOTON_COMENZAR}
+                aria-label={TEXTO_BOTON_COMENZAR}
+                className="flex items-center justify-center w-10 h-10 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-lg shadow-md shadow-indigo-500/25 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-wait shrink-0"
+              >
+                ↑
+              </button>
+            </div>
+          </div>
         </form>
-      </section>
+
+        {/* BARRA FLOTANTE INFERIOR DE MODOS: Rápido, Pro y Máximo + Presupuesto Total Estimado en USD */}
+        <div className="flex flex-col items-center gap-2.5">
+          {/* Cápsula translúcida centrada (estilo glassmorphism) */}
+          <div className="inline-flex flex-wrap items-center justify-center gap-1.5 rounded-full border border-slate-200/80 bg-white/80 backdrop-blur-md p-1.5 shadow-lg shadow-slate-200/60">
+            {PERFILES_PRODUCCION_CALIDAD.map((perfil) => {
+              const estaSeleccionado = modoCalidadActual === perfil.modo;
+              const costoPerfilPorMinuto = calcularCostoPorMinutoUSD(
+                perfil.idModeloImagen,
+                perfil.idModeloVideo
+              );
+
+              return (
+                <button
+                  key={perfil.modo}
+                  type="button"
+                  disabled={estaGuardando}
+                  onClick={() => aplicarPerfilDeCalidad(perfil)}
+                  title={`${perfil.descripcionCorta} (${perfil.rangoReferenciaUSD})`}
+                  className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs transition-all cursor-pointer disabled:opacity-50 ${
+                    estaSeleccionado
+                      ? "bg-indigo-600 text-white font-bold shadow-sm shadow-indigo-500/30"
+                      : "text-slate-700 hover:bg-slate-100/90 font-semibold"
+                  }`}
+                >
+                  <span>{perfil.icono}</span>
+                  <span>{perfil.titulo}</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                      estaSeleccionado
+                        ? "bg-white/20 text-white"
+                        : "bg-slate-100 text-slate-500"
+                    }`}
+                  >
+                    ~${costoPerfilPorMinuto.toFixed(2)}/min
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Indicador dinámico en vivo del costo por minuto y presupuesto total según la duración seleccionada */}
+          <div className="inline-flex flex-wrap items-center justify-center gap-3 rounded-full border border-emerald-200/80 bg-emerald-50/70 px-4 py-1.5 text-xs text-emerald-950">
+            <span>
+              Tarifa actual:{" "}
+              <strong className="font-bold">
+                ~${costoEstimadoPorMinutoUSD.toFixed(2)} USD / min
+              </strong>
+              {modoCalidadActual === "personalizado" && (
+                <span className="ml-1.5 rounded-full bg-white border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                  Personalizado
+                </span>
+              )}
+            </span>
+            <span className="text-emerald-300">•</span>
+            <span>
+              Costo aprox. del proyecto ({duracionObjetivo}):{" "}
+              <strong className="font-bold text-emerald-800">
+                ~${presupuestoTotalEstimadoUSD.toFixed(2)} USD
+              </strong>
+            </span>
+          </div>
+        </div>
+      </div>
     </main>
   );
 }

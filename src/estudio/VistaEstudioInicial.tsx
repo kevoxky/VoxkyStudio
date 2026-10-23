@@ -1,4 +1,4 @@
-// Vista en tiempo real del estudio (/estudio/[id]) en colores claros que escucha los cambios del documento en la colección "proyectos".
+// Vista en tiempo real del estudio (/estudio/[id]) que muestra las etiquetas, motores y presupuesto en USD guardados en Firestore.
 // Se conecta con src/configuracion/cliente_firebase.ts, src/mesa_entrada/constantes_mesa_entrada.ts y src/app/estudio/[id]/page.tsx.
 
 "use client";
@@ -12,12 +12,24 @@ import {
 } from "@/configuracion/cliente_firebase";
 import {
   COLECCION_PROYECTOS,
-  FormatoVideo,
+  type FormatoVideo,
+  type IdiomaSalidaVideo,
+  MODELOS_IMAGEN_FAL,
+  MODELOS_VIDEO_FAL,
+  type ModoCalidadProduccion,
 } from "@/mesa_entrada/constantes_mesa_entrada";
 
 interface FichaProyectoFirestore {
   ideaOriginal: string;
   formato: FormatoVideo;
+  duracionObjetivo?: string;
+  toleranciaFlexible?: boolean;
+  modeloImagen?: string;
+  modeloVideo?: string;
+  modoCalidad?: ModoCalidadProduccion;
+  costoEstimadoPorMinutoUSD?: number;
+  presupuestoTotalEstimadoUSD?: number;
+  idiomaSalida?: IdiomaSalidaVideo;
   imagenesReferencia: string[];
   estado: string;
 }
@@ -27,15 +39,26 @@ interface PropiedadesVistaEstudio {
 }
 
 /**
- * Muestra la sala del estudio en tonos claros conectada en tiempo real a la ficha maestra del proyecto en Firestore.
- * Recibe el identificador único del proyecto desde la URL y devuelve la pantalla de seguimiento.
+ * Busca el nombre comercial amigable de un modelo de fal.ai a partir de su identificador técnico.
+ * Recibe el ID guardado en Firestore y devuelve el nombre legible para mostrar en la etiqueta.
+ */
+function obtenerNombreAmigableModelo(idModelo: string | undefined): string {
+  if (!idModelo) return "Por defecto";
+
+  const todosLosModelos = [...MODELOS_IMAGEN_FAL, ...MODELOS_VIDEO_FAL];
+  const encontrado = todosLosModelos.find((modelo) => modelo.id === idModelo);
+  return encontrado ? encontrado.nombre : idModelo;
+}
+
+/**
+ * Muestra la sala del estudio conectada en tiempo real a la ficha maestra del proyecto en Firestore.
+ * Recibe el identificador único del proyecto desde la URL y devuelve el resumen técnico y financiero.
  */
 export function VistaEstudioInicial({ proyectoId }: PropiedadesVistaEstudio) {
   const [proyecto, setProyecto] = useState<FichaProyectoFirestore | null>(null);
   const [cargando, setCargando] = useState<boolean>(true);
   const [mensajeError, setMensajeError] = useState<string | null>(null);
 
-  // Escuchamos en tiempo real el documento del proyecto dentro de la colección "proyectos"
   useEffect(() => {
     const estadoFirebase = verificarConfiguracionFirebase();
     if (!estadoFirebase.estaConfigurado) {
@@ -79,7 +102,7 @@ export function VistaEstudioInicial({ proyectoId }: PropiedadesVistaEstudio) {
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100 text-slate-900 flex items-center justify-center p-4 sm:p-6">
-      <section className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xl shadow-slate-200/70">
+      <section className="w-full max-w-3xl rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xl shadow-slate-200/70">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4 mb-6">
           <div>
             <span className="text-xs font-semibold text-indigo-600 uppercase tracking-wider">
@@ -92,7 +115,7 @@ export function VistaEstudioInicial({ proyectoId }: PropiedadesVistaEstudio) {
 
           <Link
             href="/"
-            className="rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 px-3.5 py-2 text-xs font-semibold text-slate-700 transition-colors"
+            className="rounded-full border border-slate-200 bg-slate-50 hover:bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-700 transition-colors"
           >
             ← Volver a la Mesa de Entrada
           </Link>
@@ -108,7 +131,7 @@ export function VistaEstudioInicial({ proyectoId }: PropiedadesVistaEstudio) {
         )}
 
         {!cargando && mensajeError && (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
             {mensajeError}
           </div>
         )}
@@ -116,7 +139,7 @@ export function VistaEstudioInicial({ proyectoId }: PropiedadesVistaEstudio) {
         {!cargando && proyecto && (
           <div className="space-y-6">
             {/* Indicador del estado actual en tiempo real */}
-            <div className="flex items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50/70 px-4 py-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-200 bg-indigo-50/70 px-4 py-3.5">
               <div className="flex items-center gap-3">
                 <span className="h-3 w-3 rounded-full bg-indigo-600 animate-pulse" />
                 <div>
@@ -128,9 +151,58 @@ export function VistaEstudioInicial({ proyectoId }: PropiedadesVistaEstudio) {
                   </p>
                 </div>
               </div>
-              <span className="rounded-lg bg-white border border-indigo-200 px-3 py-1 text-xs font-semibold text-indigo-900 shadow-2xs">
-                Formato {proyecto.formato}
+
+              <span className="rounded-full bg-white border border-indigo-200 px-3.5 py-1 text-xs font-semibold text-indigo-900 shadow-2xs">
+                Idioma final: {proyecto.idiomaSalida ?? "Español"}
               </span>
+            </div>
+
+            {/* Resumen visual con las etiquetas técnicas y financieras seleccionadas */}
+            <div className="space-y-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Configuración y Presupuesto Estimado
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-3.5 py-1.5 text-xs font-semibold text-slate-800">
+                  Formato: {proyecto.formato}
+                </span>
+
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-3.5 py-1.5 text-xs font-semibold text-slate-800">
+                  Duración: {proyecto.duracionObjetivo ?? "Auto"}{" "}
+                  {proyecto.toleranciaFlexible !== false && (
+                    <span className="text-slate-500 font-normal">
+                      (tolerancia flexible)
+                    </span>
+                  )}
+                </span>
+
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3.5 py-1.5 text-xs font-semibold text-sky-900">
+                  Imagen: {obtenerNombreAmigableModelo(proyecto.modeloImagen)}
+                </span>
+
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3.5 py-1.5 text-xs font-semibold text-sky-900">
+                  Video: {obtenerNombreAmigableModelo(proyecto.modeloVideo)}
+                </span>
+
+                {proyecto.modoCalidad && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3.5 py-1.5 text-xs font-bold text-indigo-900 uppercase">
+                    Modo: {proyecto.modoCalidad}
+                  </span>
+                )}
+
+                {typeof proyecto.costoEstimadoPorMinutoUSD === "number" && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-1.5 text-xs font-semibold text-emerald-900">
+                    Tarifa: ~${proyecto.costoEstimadoPorMinutoUSD.toFixed(2)} USD/min
+                  </span>
+                )}
+
+                {typeof proyecto.presupuestoTotalEstimadoUSD === "number" && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-100/80 px-3.5 py-1.5 text-xs font-bold text-emerald-950">
+                    Presupuesto aprox.: ~$
+                    {proyecto.presupuestoTotalEstimadoUSD.toFixed(2)} USD
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Idea original guardada en la ficha maestra */}
@@ -138,7 +210,7 @@ export function VistaEstudioInicial({ proyectoId }: PropiedadesVistaEstudio) {
               <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Idea Original
               </h2>
-              <p className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm sm:text-base text-slate-800 whitespace-pre-wrap">
+              <p className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm sm:text-base text-slate-800 whitespace-pre-wrap">
                 {proyecto.ideaOriginal}
               </p>
             </div>
@@ -150,14 +222,14 @@ export function VistaEstudioInicial({ proyectoId }: PropiedadesVistaEstudio) {
               </h2>
               {proyecto.imagenesReferencia &&
               proyecto.imagenesReferencia.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
                   {proyecto.imagenesReferencia.map((enlace, indice) => (
                     <a
                       key={enlace}
                       href={enlace}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="block aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-50 hover:border-indigo-500 transition-colors shadow-xs"
+                      className="block aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-50 hover:border-indigo-500 transition-colors shadow-2xs"
                     >
                       <img
                         src={enlace}
