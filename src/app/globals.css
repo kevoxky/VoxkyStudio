@@ -1,0 +1,4 @@
+/* Estilos globales de VoxkyStudio cargados con Tailwind CSS v4. */
+/* Se conecta con src/app/layout.tsx para dar diseño moderno a todas las pantallas. */
+
+@import "tailwindcss";

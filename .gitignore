@@ -1,0 +1,14 @@
+# ==========================================
+# Archivos y carpetas protegidos (NUNCA subir a Git)
+# ==========================================
+.env
+.env.*
+!.env.example
+
+# Dependencias y archivos generados por Next.js
+node_modules/
+.next/
+out/
+build/
+next-env.d.ts
+*.tsbuildinfo
