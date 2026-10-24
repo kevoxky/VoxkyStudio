@@ -45,6 +45,12 @@ Imagina que entras a una agencia de cine real:
 ---
 
 ## (d) ¿Qué se ha hecho hasta ahora? (Diario de sesiones)
+### Sesión del 24 de octubre de 2026 (Paso 2: Agente Productor Ejecutivo Multimodal y Clarificador Elástico)
+- Se amplió el botón `+` para aceptar **imágenes, canciones/audios (`.mp3`, `.wav`, `.m4a`) y videos (`.mp4`, `.mov`, `.webm`)**, guardando el tipo de cada archivo en Firebase.
+- Se creó el **Agente Productor Ejecutivo** que clasifica automáticamente cada proyecto en una de las **5 líneas de producción** (Videoclip Musical, Publicidad Comercial, Contenido Redes/Influencer, Traducción/Doblaje de Video o Cine/Serie/Storyboard).
+- Se dotó al agente de **Ojos (`fal-ai/any-llm/vision`)** para describir tus fotos y **Oídos (`fal-ai/whisper`)** para transcribir la letra de tus canciones o diálogos con marcas de tiempo.
+- Se programó la **Regla de Clarificación Elástica**: si ya todo está claro (o si se conecta desde un Widget externo con `modoSilencioso: true`), hace **0 preguntas** y pasa directo a `listo_para_guion`; si faltan detalles artísticos, genera solo las preguntas necesarias con botones rápidos y opción de *"Saltar preguntas (Que el Director decida por mí)"*.
+
 ### Sesión del 23 de octubre de 2026 (Perfiles Rápido/Pro/Máximo con precios reales en USD y Tooltips)
 - Se consultaron en directo los precios oficiales mediante el MCP de `fal.ai` y se agregaron las fichas técnicas de cada modelo de imagen y video (calidad, precio real por imagen o segundo, y velocidad).
 - Se creó el nuevo selector desplegable con **Tarjeta de Información (Hover Card)** a la derecha que muestra Calidad, Precio Real y Velocidad al pasar el mouse sobre cada modelo.

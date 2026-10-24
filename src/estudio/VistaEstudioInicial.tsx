@@ -1,16 +1,17 @@
-// Vista en tiempo real del estudio (/estudio/[id]) que muestra las etiquetas, motores y presupuesto en USD guardados en Firestore.
-// Se conecta con src/configuracion/cliente_firebase.ts, src/mesa_entrada/constantes_mesa_entrada.ts y src/app/estudio/[id]/page.tsx.
+// Vista en tiempo real del estudio (/estudio/[id]) que coordina el Agente Productor Ejecutivo y muestra el estado en vivo.
+// Se conecta con src/configuracion/cliente_firebase.ts, PanelClarificacionDirector.tsx y /api/agentes/analizar-idea.
 
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import {
   obtenerBaseDeDatosFirestore,
   verificarConfiguracionFirebase,
 } from "@/configuracion/cliente_firebase";
 import {
+  type ArchivoMultimediaGuardado,
   COLECCION_PROYECTOS,
   type FormatoVideo,
   type IdiomaSalidaVideo,
@@ -18,6 +19,8 @@ import {
   MODELOS_VIDEO_FAL,
   type ModoCalidadProduccion,
 } from "@/mesa_entrada/constantes_mesa_entrada";
+import { type AnalisisProductorEjecutivo } from "@/agentes/analista_clarificador/tipos_productor_ejecutivo";
+import { PanelClarificacionDirector } from "./PanelClarificacionDirector";
 
 interface FichaProyectoFirestore {
   ideaOriginal: string;
@@ -31,6 +34,8 @@ interface FichaProyectoFirestore {
   presupuestoTotalEstimadoUSD?: number;
   idiomaSalida?: IdiomaSalidaVideo;
   imagenesReferencia: string[];
+  archivosMultimedia?: ArchivoMultimediaGuardado[];
+  analisisProductorEjecutivo?: AnalisisProductorEjecutivo;
   estado: string;
 }
 
@@ -51,14 +56,18 @@ function obtenerNombreAmigableModelo(idModelo: string | undefined): string {
 }
 
 /**
- * Muestra la sala del estudio conectada en tiempo real a la ficha maestra del proyecto en Firestore.
- * Recibe el identificador único del proyecto desde la URL y devuelve el resumen técnico y financiero.
+ * Muestra la sala del estudio conectada en tiempo real a Firestore y activa el análisis del Productor Ejecutivo.
+ * Recibe el identificador único del proyecto desde la URL y devuelve la pantalla de trabajo en vivo.
  */
 export function VistaEstudioInicial({ proyectoId }: PropiedadesVistaEstudio) {
   const [proyecto, setProyecto] = useState<FichaProyectoFirestore | null>(null);
   const [cargando, setCargando] = useState<boolean>(true);
+  const [analizandoConAgente, setAnalizandoConAgente] =
+    useState<boolean>(false);
   const [mensajeError, setMensajeError] = useState<string | null>(null);
+  const analisisIniciadoRef = useRef<boolean>(false);
 
+  // Escuchamos en tiempo real el documento del proyecto dentro de la colección "proyectos"
   useEffect(() => {
     const estadoFirebase = verificarConfiguracionFirebase();
     if (!estadoFirebase.estaConfigurado) {
@@ -100,9 +109,92 @@ export function VistaEstudioInicial({ proyectoId }: PropiedadesVistaEstudio) {
     return () => cancelarSuscripcion();
   }, [proyectoId]);
 
+  // Cuando el proyecto está en "analizando_idea", invocamos automáticamente al Agente Productor Ejecutivo
+  useEffect(() => {
+    if (
+      !proyecto ||
+      proyecto.estado !== "analizando_idea" ||
+      proyecto.analisisProductorEjecutivo ||
+      analisisIniciadoRef.current
+    ) {
+      return;
+    }
+
+    analisisIniciadoRef.current = true;
+    setAnalizandoConAgente(true);
+
+    async function dispararAgenteProductor() {
+      try {
+        const respuesta = await fetch("/api/agentes/analizar-idea", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            proyectoId,
+            ideaOriginal: proyecto?.ideaOriginal,
+            formato: proyecto?.formato,
+            duracionObjetivo: proyecto?.duracionObjetivo,
+            idiomaSalida: proyecto?.idiomaSalida,
+            archivosMultimedia: proyecto?.archivosMultimedia,
+            imagenesReferencia: proyecto?.imagenesReferencia,
+          }),
+        });
+
+        const datos = await respuesta.json();
+        if (!respuesta.ok || !datos.ok) {
+          throw new Error(
+            datos.error ?? "No se pudo completar el análisis del Productor Ejecutivo."
+          );
+        }
+
+        const baseDeDatos = obtenerBaseDeDatosFirestore();
+        const referenciaDocumento = doc(
+          baseDeDatos,
+          COLECCION_PROYECTOS,
+          proyectoId
+        );
+
+        await updateDoc(referenciaDocumento, {
+          analisisProductorEjecutivo: datos.analisisProductorEjecutivo,
+          estado: datos.estadoSiguiente,
+        });
+      } catch (error) {
+        setMensajeError(
+          error instanceof Error
+            ? error.message
+            : "Error al analizar la idea con el Agente Productor Ejecutivo."
+        );
+      } finally {
+        setAnalizandoConAgente(false);
+      }
+    }
+
+    dispararAgenteProductor();
+  }, [proyecto, proyectoId]);
+
+  /**
+   * Guarda en Firestore las respuestas de clarificación confirmadas por el usuario y actualiza el estado a "listo_para_guion".
+   * Recibe el análisis actualizado y el nuevo estado, y actualiza el documento en la colección "proyectos".
+   */
+  async function guardarClarificacionEnFirestore(
+    analisisActualizado: AnalisisProductorEjecutivo,
+    nuevoEstado: string
+  ) {
+    const baseDeDatos = obtenerBaseDeDatosFirestore();
+    const referenciaDocumento = doc(
+      baseDeDatos,
+      COLECCION_PROYECTOS,
+      proyectoId
+    );
+
+    await updateDoc(referenciaDocumento, {
+      analisisProductorEjecutivo: analisisActualizado,
+      estado: nuevoEstado,
+    });
+  }
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100 text-slate-900 flex items-center justify-center p-4 sm:p-6">
-      <section className="w-full max-w-3xl rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xl shadow-slate-200/70">
+      <section className="w-full max-w-4xl rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xl shadow-slate-200/70">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4 mb-6">
           <div>
             <span className="text-xs font-semibold text-indigo-600 uppercase tracking-wider">
@@ -131,7 +223,7 @@ export function VistaEstudioInicial({ proyectoId }: PropiedadesVistaEstudio) {
         )}
 
         {!cargando && mensajeError && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
+          <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
             {mensajeError}
           </div>
         )}
@@ -147,7 +239,9 @@ export function VistaEstudioInicial({ proyectoId }: PropiedadesVistaEstudio) {
                     Estado actual del estudio
                   </p>
                   <p className="text-sm sm:text-base font-bold text-indigo-950">
-                    {proyecto.estado}
+                    {analizandoConAgente
+                      ? "analizando_idea (Agente Productor inspeccionando tus archivos...)"
+                      : proyecto.estado}
                   </p>
                 </div>
               </div>
@@ -192,7 +286,8 @@ export function VistaEstudioInicial({ proyectoId }: PropiedadesVistaEstudio) {
 
                 {typeof proyecto.costoEstimadoPorMinutoUSD === "number" && (
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-1.5 text-xs font-semibold text-emerald-900">
-                    Tarifa: ~${proyecto.costoEstimadoPorMinutoUSD.toFixed(2)} USD/min
+                    Tarifa: ~${proyecto.costoEstimadoPorMinutoUSD.toFixed(2)}{" "}
+                    USD/min
                   </span>
                 )}
 
@@ -215,36 +310,57 @@ export function VistaEstudioInicial({ proyectoId }: PropiedadesVistaEstudio) {
               </p>
             </div>
 
-            {/* Imágenes de referencia subidas a Firebase Storage */}
+            {/* Archivos multimedia de referencia subidos a Firebase Storage */}
             <div className="space-y-2">
               <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Imágenes de Referencia ({proyecto.imagenesReferencia?.length ?? 0})
+                Archivos Multimedia de Referencia (
+                {proyecto.archivosMultimedia?.length ??
+                  proyecto.imagenesReferencia?.length ??
+                  0}
+                )
               </h2>
-              {proyecto.imagenesReferencia &&
-              proyecto.imagenesReferencia.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                  {proyecto.imagenesReferencia.map((enlace, indice) => (
+
+              {proyecto.archivosMultimedia &&
+              proyecto.archivosMultimedia.length > 0 ? (
+                <div className="flex flex-wrap gap-3">
+                  {proyecto.archivosMultimedia.map((item, indice) => (
                     <a
-                      key={enlace}
-                      href={enlace}
+                      key={`${item.url}-${indice}`}
+                      href={item.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="block aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-50 hover:border-indigo-500 transition-colors shadow-2xs"
+                      className="rounded-xl border border-slate-200 bg-slate-50 hover:border-indigo-500 transition-colors p-2 flex items-center gap-2.5 text-xs font-semibold text-slate-700"
                     >
-                      <img
-                        src={enlace}
-                        alt={`Referencia ${indice + 1}`}
-                        className="w-full h-full object-cover"
-                      />
+                      <span>
+                        {item.tipo === "imagen"
+                          ? "🖼️"
+                          : item.tipo === "audio"
+                          ? "🎵"
+                          : "🎬"}
+                      </span>
+                      <span className="max-w-44 truncate">{item.nombre}</span>
+                      <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[10px] uppercase">
+                        {item.tipo}
+                      </span>
                     </a>
                   ))}
                 </div>
               ) : (
                 <p className="text-sm text-slate-500 italic">
-                  Este proyecto se creó sin imágenes de referencia.
+                  Este proyecto se creó sin archivos multimedia adjuntos.
                 </p>
               )}
             </div>
+
+            {/* Panel en tiempo real del Agente Productor Ejecutivo y Clarificador Elástico (Paso 2) */}
+            {proyecto.analisisProductorEjecutivo && (
+              <PanelClarificacionDirector
+                proyectoId={proyectoId}
+                estadoActual={proyecto.estado}
+                analisis={proyecto.analisisProductorEjecutivo}
+                alConfirmarClarificacion={guardarClarificacionEnFirestore}
+              />
+            )}
           </div>
         )}
       </section>

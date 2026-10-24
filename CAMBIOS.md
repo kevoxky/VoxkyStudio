@@ -1,5 +1,12 @@
 # Registro de Cambios (CAMBIOS.md)
 
+## 2026-10-24 — Paso 2: Agente Productor Ejecutivo Multimodal, Clarificador Elástico y 5 Líneas de Producción
+- Se creó la rama `paso-2-productor-ejecutivo` en Git.
+- Se amplió la entrada en `src/mesa_entrada/` y `storage.rules` para soportar **Imágenes** (`.jpg`, `.png`, `.webp`), **Audios** (`.mp3`, `.wav`, `.m4a`) y **Videos** (`.mp4`, `.mov`, `.webm`), guardando en Firestore `archivosMultimedia` con `tipo: 'imagen' | 'audio' | 'video'` y `url`.
+- Se construyó en `src/agentes/analista_clarificador/` el clasificador de las **5 especialidades** (`videoclip_musical`, `publicidad_comercial`, `contenido_redes_influencer`, `traduccion_doblaje_video`, `cine_serie_storyboard`), la inspección multimodal con `fal-ai/any-llm/vision` (Ojos) y `fal-ai/whisper` (Oídos con marcas de tiempo), y la **Regla de Clarificación Elástica (de 0 a N preguntas)**.
+- Se crearon los endpoints desacoplados `/api/agentes/analizar-idea` y `/api/agentes/confirmar-clarificacion` preparados para VoxkyStudio y futuros Widgets/APIs B2B (`modoSilencioso: true`).
+- Se creó `PanelClarificacionDirector.tsx` integrado en tiempo real dentro de `VistaEstudioInicial.tsx`.
+
 ## 2026-10-23 — Perfiles de Producción con Precios Reales en USD (MCP fal.ai) y Tarjetas de Detalle (Tooltips)
 - Se consultó el catálogo y precios oficiales mediante el servidor MCP de `fal.ai` (`get_pricing` y `search_models`) y se estructuraron las fichas técnicas reales en `constantes_mesa_entrada.ts`.
 - Se creó `SelectorModeloConTooltip.tsx` con lista principal a la izquierda (`✓` y `💎`) y tarjeta flotante de información a la derecha (`CALIDAD`, `PRECIO REAL`, `VELOCIDAD`).

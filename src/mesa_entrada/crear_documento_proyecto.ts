@@ -1,4 +1,4 @@
-// Crea la ficha maestra del proyecto en la colección "proyectos" de Firestore con modelos, idioma y presupuesto en USD.
+// Crea la ficha maestra del proyecto en la colección "proyectos" de Firestore con archivos multimedia tipados y costos en USD.
 // Se conecta con src/configuracion/cliente_firebase.ts, constantes_mesa_entrada.ts, validar_entrada_proyecto.ts y subir_imagenes_referencia.ts.
 
 import { collection, doc, setDoc, serverTimestamp } from "firebase/firestore";
@@ -24,7 +24,7 @@ import {
   validarImagenesReferencia,
   validarModelosFal,
 } from "./validar_entrada_proyecto";
-import { subirImagenesReferenciaStorage } from "./subir_imagenes_referencia";
+import { subirArchivosMultimediaStorage } from "./subir_imagenes_referencia";
 
 export interface DatosEntradaProyecto {
   ideaOriginal: string;
@@ -41,7 +41,7 @@ export interface DatosEntradaProyecto {
 }
 
 /**
- * Valida todos los datos técnicos y financieros elegidos en la Mesa de Entrada antes de subir archivos o escribir en Firebase.
+ * Valida todos los datos técnicos, multimedia y financieros antes de subir archivos o escribir en Firebase.
  * Recibe los datos del formulario y lanza un error claro en español si algo no cumple las reglas.
  */
 function verificarDatosAntesDeGuardar(datos: DatosEntradaProyecto): void {
@@ -78,8 +78,8 @@ function verificarDatosAntesDeGuardar(datos: DatosEntradaProyecto): void {
 }
 
 /**
- * Sube primero las imágenes a referencias/{proyectoId}/ y luego crea el documento completo en la colección "proyectos".
- * Recibe las preferencias y costos de la Mesa de Entrada y devuelve el identificador único del proyecto creado.
+ * Sube primero los archivos multimedia a referencias/{proyectoId}/ y luego crea el documento en la colección "proyectos".
+ * Recibe las preferencias de la Mesa de Entrada y devuelve el identificador único del proyecto creado.
  */
 export async function crearProyectoEnFirestore(
   datos: DatosEntradaProyecto
@@ -92,13 +92,16 @@ export async function crearProyectoEnFirestore(
   const referenciaDocumento = doc(referenciaColeccion);
   const proyectoId = referenciaDocumento.id;
 
-  // Paso 1: Subimos las imágenes seleccionadas a Firebase Storage en referencias/{proyectoId}/
-  const enlacesImagenes = await subirImagenesReferenciaStorage(
+  // Paso 1: Subimos imágenes, audios o videos a Firebase Storage guardando su tipo ('imagen' | 'audio' | 'video') y URL
+  const archivosMultimedia = await subirArchivosMultimediaStorage(
     proyectoId,
     datos.archivosReferencia
   );
 
-  // Paso 2: Guardamos la ficha maestra en la colección "proyectos" incluyendo modoCalidad y presupuesto en USD
+  // Mantenemos también la lista simple de URLs en imagenesReferencia por compatibilidad
+  const enlacesCompatibles = archivosMultimedia.map((item) => item.url);
+
+  // Paso 2: Guardamos la ficha maestra en la colección "proyectos"
   try {
     await setDoc(referenciaDocumento, {
       ideaOriginal: datos.ideaOriginal.trim(),
@@ -113,7 +116,8 @@ export async function crearProyectoEnFirestore(
       presupuestoTotalEstimadoUSD: datos.presupuestoTotalEstimadoUSD,
       modelosInternos: { ...MODELOS_INTERNOS_POR_DEFECTO },
       idiomaSalida: datos.idiomaSalida,
-      imagenesReferencia: enlacesImagenes,
+      imagenesReferencia: enlacesCompatibles,
+      archivosMultimedia,
       estado: ESTADO_ANALIZANDO_IDEA,
       fechaCreacion: serverTimestamp(),
     });

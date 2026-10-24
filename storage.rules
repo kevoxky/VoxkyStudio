@@ -1,5 +1,5 @@
 // Reglas de seguridad de Firebase Storage para VoxkyStudio.
-// Solo permiten subir archivos de imagen de hasta 10 MB dentro de la carpeta referencias/{proyectoId}/.
+// Permiten subir imágenes (hasta 10 MB), audios y videos (hasta 100 MB) dentro de referencias/{proyectoId}/.
 
 rules_version = '2';
 
@@ -7,8 +7,11 @@ service firebase.storage {
   match /b/{bucket}/o {
     match /referencias/{proyectoId}/{nombreArchivo} {
       allow read: if true;
-      allow write: if request.resource.size <= 10 * 1024 * 1024
-                   && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow write: if request.resource.size <= 100 * 1024 * 1024
+                   && (request.resource.contentType.matches('image/.*')
+                       || request.resource.contentType.matches('audio/.*')
+                       || request.resource.contentType.matches('video/.*')
+                       || request.resource.contentType == 'application/octet-stream');
     }
   }
 }

@@ -1,5 +1,5 @@
-// Define constantes, formatos, duraciones, perfiles de producción y fichas técnicas reales de fal.ai auditadas por MCP.
-// Se conecta con validar_entrada_proyecto.ts, SelectorModeloConTooltip.tsx, crear_documento_proyecto.ts y MesaDeEntrada.tsx.
+// Define constantes, tipos multimedia (imagen, audio, video), formatos, duraciones y fichas de fal.ai.
+// Se conecta con validar_entrada_proyecto.ts, ZonaImagenesReferencia.tsx, subir_imagenes_referencia.ts y los agentes del Paso 2.
 
 export type FormatoVideo = "16:9" | "9:16" | "1:1" | "4:5" | "4:3" | "21:9";
 
@@ -21,7 +21,19 @@ export type IdiomaSalidaVideo =
   | "Italiano"
   | "Deutsch";
 
-export type EstadoInicialProyecto = "analizando_idea";
+export type TipoArchivoReferencia = "imagen" | "audio" | "video";
+
+export type EstadoProyecto =
+  | "analizando_idea"
+  | "esperando_clarificacion"
+  | "listo_para_guion";
+
+export interface ArchivoMultimediaGuardado {
+  tipo: TipoArchivoReferencia;
+  url: string;
+  nombre: string;
+  mimeType: string;
+}
 
 export interface OpcionFormato {
   valor: FormatoVideo;
@@ -54,11 +66,14 @@ export interface PerfilProduccionCalidad {
 // Nombre de la colección en Firebase Firestore donde cada documento es la ficha maestra de un video
 export const COLECCION_PROYECTOS = "proyectos";
 
-// Nombre de la carpeta raíz en Firebase Storage donde se guardan las fotos de referencia de cada proyecto
+// Nombre de la carpeta raíz en Firebase Storage donde se guardan los archivos multimedia de cada proyecto
 export const CARPETA_STORAGE_REFERENCIAS = "referencias";
 
-// Estado inicial exacto con el que nace cada proyecto en Firestore
-export const ESTADO_ANALIZANDO_IDEA: EstadoInicialProyecto = "analizando_idea";
+// Estados del flujo de producción entre Paso 1 y Paso 2
+export const ESTADO_ANALIZANDO_IDEA: EstadoProyecto = "analizando_idea";
+export const ESTADO_ESPERANDO_CLARIFICACION: EstadoProyecto =
+  "esperando_clarificacion";
+export const ESTADO_LISTO_PARA_GUION: EstadoProyecto = "listo_para_guion";
 
 // Cantidad estimada de imágenes base que se generan por cada minuto de video (1 toma cada 5 segundos = 12 imágenes)
 export const IMAGENES_ESTIMADAS_POR_MINUTO = 12;
@@ -340,8 +355,7 @@ export const PERFILES_PRODUCCION_CALIDAD: PerfilProduccionCalidad[] = [
 ];
 
 export const MODO_CALIDAD_POR_DEFECTO: ModoCalidadProduccion = "pro";
-export const MODELO_IMAGEN_POR_DEFECTO: string =
-  "google/nano-banana-2.1";
+export const MODELO_IMAGEN_POR_DEFECTO: string = "google/nano-banana-2.1";
 export const MODELO_VIDEO_POR_DEFECTO: string =
   "fal-ai/kling-video/v3/pro/image-to-video";
 
@@ -352,11 +366,13 @@ export const MODOS_CALIDAD_PERMITIDOS: ModoCalidadProduccion[] = [
   "personalizado",
 ];
 
-// 6. Modelos internos por defecto (NO aparecen en la interfaz de usuario; los usa el backend automáticamente)
+// 6. Modelos internos por defecto (NO aparecen en la interfaz; incluyen Whisper y Visión para el Agente Productor)
 export const MODELOS_INTERNOS_POR_DEFECTO = {
   voz: "fal-ai/elevenlabs/tts/multilingual-v2",
+  transcripcionAudio: "fal-ai/whisper",
   analisisVisionAudio: "fal-ai/any-llm/vision",
-  lipSync: "fal-ai/sync-lipsync",
+  razonamientoDirector: "fal-ai/any-llm",
+  lipSync: "fal-ai/sync-lipsync/v3",
   upscaling: "fal-ai/topaz/upscale/video",
 } as const;
 
@@ -372,15 +388,44 @@ export const IDIOMAS_SALIDA_PERMITIDOS: IdiomaSalidaVideo[] = [
 
 export const IDIOMA_SALIDA_POR_DEFECTO: IdiomaSalidaVideo = "Español";
 
-// 8. Límites de validación para el texto y para cada archivo de imagen subido
+// 8. Archivos Multimedia de Referencia soportados (Imágenes, Audios y Videos)
 export const LONGITUD_MINIMA_IDEA = 5;
 export const LONGITUD_MAXIMA_IDEA = 3000;
+
+// Límites de peso: 10 MB por imagen y hasta 100 MB para canciones o videos de referencia
 export const TAMANO_MAXIMO_IMAGEN_BYTES = 10 * 1024 * 1024;
+export const TAMANO_MAXIMO_MULTIMEDIA_BYTES = 100 * 1024 * 1024;
+
 export const TIPOS_IMAGEN_PERMITIDOS = [
   "image/jpeg",
   "image/png",
   "image/webp",
 ];
+
+export const TIPOS_AUDIO_PERMITIDOS = [
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/mp4",
+  "audio/x-m4a",
+  "audio/m4a",
+];
+
+export const TIPOS_VIDEO_PERMITIDOS = [
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+];
+
+export const TIPOS_MULTIMEDIA_PERMITIDOS = [
+  ...TIPOS_IMAGEN_PERMITIDOS,
+  ...TIPOS_AUDIO_PERMITIDOS,
+  ...TIPOS_VIDEO_PERMITIDOS,
+];
+
+export const ACEPTAR_ARCHIVOS_MULTIMEDIA_INPUT =
+  ".jpg,.jpeg,.png,.webp,.mp3,.wav,.m4a,.mp4,.mov,.webm,image/jpeg,image/png,image/webp,audio/mpeg,audio/wav,audio/mp4,video/mp4,video/quicktime,video/webm";
 
 export const TEXTO_BOTON_COMENZAR = "Comenzar Producción";
 export const TEXTO_CARGA_ESTUDIO = "Preparando tu estudio...";

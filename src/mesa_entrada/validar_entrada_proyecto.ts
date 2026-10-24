@@ -1,5 +1,5 @@
-// Valida los datos del proyecto y calcula en tiempo real los costos en USD según los modelos de fal.ai y la duración.
-// Se conecta con constantes_mesa_entrada.ts, MesaDeEntrada.tsx, crear_documento_proyecto.ts y las pruebas en tests/.
+// Valida los datos del proyecto, archivos multimedia (imagen, audio, video) y costos estimados en USD.
+// Se conecta con constantes_mesa_entrada.ts, ZonaImagenesReferencia.tsx, subir_imagenes_referencia.ts y crear_documento_proyecto.ts.
 
 import {
   CANTIDAD_MAXIMA_CUSTOM,
@@ -22,7 +22,11 @@ import {
   PERFILES_PRODUCCION_CALIDAD,
   SEGUNDOS_POR_MINUTO,
   TAMANO_MAXIMO_IMAGEN_BYTES,
+  TAMANO_MAXIMO_MULTIMEDIA_BYTES,
+  TIPOS_AUDIO_PERMITIDOS,
   TIPOS_IMAGEN_PERMITIDOS,
+  TIPOS_VIDEO_PERMITIDOS,
+  type TipoArchivoReferencia,
   type UnidadDuracionCustom,
 } from "./constantes_mesa_entrada.ts";
 
@@ -175,24 +179,66 @@ export function validarIdiomaSalida(idiomaSalida: string): ResultadoValidacion {
 }
 
 /**
- * Verifica que cada imagen de referencia tenga un formato seguro (JPG, PNG, WEBP) y no supere 10 MB.
- * Recibe la lista de archivos seleccionados y devuelve si son válidos o qué archivo tiene un problema.
+ * Identifica si un archivo adjunto es una 'imagen', un 'audio' o un 'video' según su tipo MIME o su extensión.
+ * Recibe el archivo y devuelve su categoría multimedia o null si no es compatible.
+ */
+export function detectarTipoArchivoMultimedia(
+  archivo: ArchivoImagenMinimo
+): TipoArchivoReferencia | null {
+  const mime = (archivo.type || "").toLowerCase();
+  const nombre = (archivo.name || "").toLowerCase();
+
+  if (
+    TIPOS_IMAGEN_PERMITIDOS.includes(mime) ||
+    /\.(jpg|jpeg|png|webp)$/.test(nombre)
+  ) {
+    return "imagen";
+  }
+
+  if (
+    TIPOS_AUDIO_PERMITIDOS.includes(mime) ||
+    /\.(mp3|wav|m4a)$/.test(nombre)
+  ) {
+    return "audio";
+  }
+
+  if (
+    TIPOS_VIDEO_PERMITIDOS.includes(mime) ||
+    /\.(mp4|mov|webm)$/.test(nombre)
+  ) {
+    return "video";
+  }
+
+  return null;
+}
+
+/**
+ * Verifica que cada archivo multimedia sea una imagen (.jpg, .png, .webp), audio (.mp3, .wav, .m4a) o video (.mp4, .mov, .webm) con peso seguro.
+ * Recibe la lista de archivos seleccionados y devuelve si son válidos o un mensaje de error claro.
  */
 export function validarImagenesReferencia(
   archivos: ArchivoImagenMinimo[]
 ): ResultadoValidacion {
   for (const archivo of archivos) {
-    if (!TIPOS_IMAGEN_PERMITIDOS.includes(archivo.type)) {
+    const tipoDetectado = detectarTipoArchivoMultimedia(archivo);
+
+    if (!tipoDetectado) {
       return {
         esValido: false,
-        mensajeError: `El archivo "${archivo.name}" no es una imagen válida. Usa fotos en formato JPG, PNG o WEBP.`,
+        mensajeError: `El archivo "${archivo.name}" no es compatible. Puedes subir imágenes (JPG, PNG, WEBP), audios (MP3, WAV, M4A) o videos (MP4, MOV, WEBM).`,
       };
     }
 
-    if (archivo.size > TAMANO_MAXIMO_IMAGEN_BYTES) {
+    const limiteBytes =
+      tipoDetectado === "imagen"
+        ? TAMANO_MAXIMO_IMAGEN_BYTES
+        : TAMANO_MAXIMO_MULTIMEDIA_BYTES;
+
+    if (archivo.size > limiteBytes) {
+      const limiteMB = tipoDetectado === "imagen" ? "10 MB" : "100 MB";
       return {
         esValido: false,
-        mensajeError: `La imagen "${archivo.name}" pesa demasiado (máximo 10 MB por foto).`,
+        mensajeError: `El archivo "${archivo.name}" supera el peso máximo permitido de ${limiteMB}.`,
       };
     }
   }
@@ -215,7 +261,7 @@ export function calcularCostoPorMinutoUSD(
   const precioPorSegundoVideo = fichaVideo ? fichaVideo.precioUnitarioUSD : 0.1;
 
   const totalPorMinuto =
-     IMAGENES_ESTIMADAS_POR_MINUTO * precioPorImagen +
+    IMAGENES_ESTIMADAS_POR_MINUTO * precioPorImagen +
     SEGUNDOS_POR_MINUTO * precioPorSegundoVideo;
 
   return Math.round(totalPorMinuto * 100) / 100;
