@@ -136,53 +136,97 @@ export function PanelClarificacionDirector({
         </p>
       </div>
 
-      {/* 2. Resumen del Análisis Multimodal (Visión de fotos y Transcripción Whisper de audio/video) */}
+      {/* 2. Bloques desplegables limpios: Ficha de Identidad Visual y Letra / Audio escuchado por el Agente (Whisper) */}
       {(analisis.fichaIdentidadVisual ||
         analisis.transcripcionesAudioVideo.length > 0) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        <div className="space-y-3">
           {analisis.fichaIdentidadVisual && (
-            <div className="rounded-2xl border border-sky-200 bg-sky-50/50 p-4 space-y-1.5">
-              <p className="text-xs font-bold uppercase tracking-wider text-sky-800">
-                👁️ Ficha de Identidad Visual (Ojos del Agente)
-              </p>
-              <p className="text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-                {analisis.fichaIdentidadVisual.resumenVisual}
-              </p>
-            </div>
+            <details className="group rounded-2xl border border-sky-200 bg-sky-50/60 p-4 transition-all">
+              <summary className="flex items-center justify-between gap-2 cursor-pointer list-none text-xs sm:text-sm font-bold text-sky-900">
+                <span>
+                  👁️ Ficha de Identidad Visual (Clic para ver descripción)
+                </span>
+                <span className="rounded-full bg-white border border-sky-200 px-2.5 py-0.5 text-[11px] font-semibold text-sky-800 group-open:bg-sky-700 group-open:text-white transition-colors">
+                  {analisis.fichaIdentidadVisual.detallesPorImagen.length}{" "}
+                  ref(s) ▾
+                </span>
+              </summary>
+
+              <div className="mt-3 pt-3 border-t border-sky-200/70 space-y-2">
+                <p className="text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                  {analisis.fichaIdentidadVisual.resumenVisual}
+                </p>
+                {analisis.fichaIdentidadVisual.detallesPorImagen.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {analisis.fichaIdentidadVisual.detallesPorImagen.map(
+                      (detalle, idx) => (
+                        <span
+                          key={idx}
+                          className="rounded-lg bg-white border border-sky-200 px-2.5 py-0.5 text-[11px] font-medium text-sky-900"
+                        >
+                          {detalle}
+                        </span>
+                      )
+                    )}
+                  </div>
+                )}
+              </div>
+            </details>
           )}
 
           {analisis.transcripcionesAudioVideo.map((transcripcion) => (
-            <div
+            <details
               key={transcripcion.urlArchivo}
-              className="rounded-2xl border border-violet-200 bg-violet-50/50 p-4 space-y-2"
+              className="group rounded-2xl border border-violet-200 bg-violet-50/60 p-4 transition-all"
             >
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-violet-800">
-                  🎧 Audio / Letra Transcrita (Whisper)
-                </p>
-                <span className="rounded-full bg-white border border-violet-200 px-2.5 py-0.5 text-[10px] font-bold text-violet-800">
-                  {transcripcion.nombreArchivo}
+              <summary className="flex flex-wrap items-center justify-between gap-2 cursor-pointer list-none text-xs sm:text-sm font-bold text-violet-950">
+                <span>
+                  🎵 Letra / Audio escuchado por el Agente (Clic para ver
+                  transcripción)
                 </span>
-              </div>
-              <p className="text-xs sm:text-sm text-slate-700 leading-relaxed line-clamp-4">
-                {transcripcion.textoCompleto}
-              </p>
-              {transcripcion.segmentosConTiempo.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {transcripcion.segmentosConTiempo
-                    .slice(0, 4)
-                    .map((seg, idx) => (
-                      <span
-                        key={idx}
-                        className="rounded-lg bg-white border border-violet-100 px-2 py-0.5 text-[10px] text-slate-600"
-                      >
-                        [{seg.inicioSeg.toFixed(1)}s - {seg.finSeg.toFixed(1)}s]{" "}
-                        {seg.texto}
-                      </span>
-                    ))}
+                <span className="rounded-full bg-white border border-violet-200 px-2.5 py-0.5 text-[11px] font-semibold text-violet-800 group-open:bg-violet-700 group-open:text-white transition-colors">
+                  {transcripcion.nombreArchivo} ▾
+                </span>
+              </summary>
+
+              <div className="mt-3 pt-3 border-t border-violet-200/70 space-y-3">
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-violet-900">
+                  <span className="rounded-full bg-white border border-violet-200 px-2.5 py-0.5 font-semibold">
+                    Idioma detectado: {transcripcion.idiomaDetectado}
+                  </span>
+                  <span className="rounded-full bg-white border border-violet-200 px-2.5 py-0.5">
+                    {transcripcion.ritmoYTono}
+                  </span>
                 </div>
-              )}
-            </div>
+
+                <div className="rounded-xl bg-white/90 border border-violet-100 p-3 text-xs sm:text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">
+                  {transcripcion.textoCompleto}
+                </div>
+
+                {transcripcion.segmentosConTiempo.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-violet-800">
+                      Marcas de tiempo detectadas por fal-ai/whisper (
+                      {transcripcion.segmentosConTiempo.length} segmentos):
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
+                      {transcripcion.segmentosConTiempo.map((seg, idx) => (
+                        <span
+                          key={idx}
+                          className="rounded-lg bg-white border border-violet-200/80 px-2.5 py-1 text-[11px] text-slate-700"
+                        >
+                          <strong className="text-violet-800">
+                            [{seg.inicioSeg.toFixed(1)}s -{" "}
+                            {seg.finSeg.toFixed(1)}s]
+                          </strong>{" "}
+                          {seg.texto}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </details>
           ))}
         </div>
       )}

@@ -6,6 +6,7 @@ import {
   type ArchivoMultimediaGuardado,
   MODELOS_INTERNOS_POR_DEFECTO,
 } from "@/mesa_entrada/constantes_mesa_entrada";
+import { separarArchivosPorTipoEstricto } from "@/mesa_entrada/validar_entrada_proyecto";
 import {
   type AnalisisProductorEjecutivo,
   type CategoriaProduccion,
@@ -37,23 +38,31 @@ function configurarCredencialesServidorFal(): boolean {
 }
 
 /**
- * Inspecciona las imágenes subidas usando fal-ai/any-llm/vision para extraer la ficha de identidad visual.
- * Recibe la lista de archivos de imagen y la idea del usuario, y devuelve la descripción detallada para mantener consistencia.
+ * Inspecciona exclusivamente las imágenes subidas usando fal-ai/any-llm/vision para extraer la ficha de identidad visual.
+ * Recibe la lista de archivos de imagen y la idea del usuario, y devuelve la descripción detallada sin aceptar jamás audios o videos.
  */
 export async function inspeccionarImagenesConFal(
   archivosImagen: ArchivoMultimediaGuardado[],
   ideaOriginal: string
 ): Promise<FichaIdentidadVisual | null> {
-  if (archivosImagen.length === 0) {
+  // Filtro defensivo estricto: jamás enviar URLs de .mp3, .wav, .m4a, .mp4, .mov o .webm como image_urls a Visión
+  const soloImagenesSeguras = archivosImagen.filter(
+    (img) =>
+      img.tipo === "imagen" &&
+      !/\.(mp3|wav|m4a|mp4|mov|webm)(\?|#|$)/i.test(img.url) &&
+      !/\.(mp3|wav|m4a|mp4|mov|webm)$/i.test(img.nombre)
+  );
+
+  if (soloImagenesSeguras.length === 0) {
     return null;
   }
 
-  const urlsImagenes = archivosImagen.map((img) => img.url);
+  const urlsImagenes = soloImagenesSeguras.map((img) => img.url);
 
   if (!configurarCredencialesServidorFal()) {
     return {
       resumenVisual: `Se registraron ${urlsImagenes.length} imagen(es) de referencia visual listas para mantener consistencia.`,
-      detallesPorImagen: archivosImagen.map(
+      detallesPorImagen: soloImagenesSeguras.map(
         (img, i) => `Referencia #${i + 1} (${img.nombre})`
       ),
     };
@@ -81,14 +90,14 @@ export async function inspeccionarImagenesConFal(
       resumenVisual:
         textoSalida ||
         `Identidad visual extraída de ${urlsImagenes.length} imagen(es) de referencia.`,
-      detallesPorImagen: archivosImagen.map(
+      detallesPorImagen: soloImagenesSeguras.map(
         (img, i) => `Imagen ${i + 1}: ${img.nombre}`
       ),
     };
   } catch {
     return {
       resumenVisual: `Se analizaron ${urlsImagenes.length} imagen(es) de referencia para conservar la identidad de personajes, productos y estilo.`,
-      detallesPorImagen: archivosImagen.map(
+      detallesPorImagen: soloImagenesSeguras.map(
         (img, i) => `Imagen ${i + 1}: ${img.nombre}`
       ),
     };
@@ -284,26 +293,17 @@ export async function ejecutarAnalisisProductorEjecutivo(
   const modoSilencioso = Boolean(entrada.modoSilencioso);
   const idiomaSalida = entrada.idiomaSalida || "Español";
 
-  // Normalizamos la lista de archivos multimedia (soportando tanto objetos nuevos como URLs de compatibilidad)
-  const archivosMultimedia: ArchivoMultimediaGuardado[] =
-    Array.isArray(entrada.archivosMultimedia) &&
-    entrada.archivosMultimedia.length > 0
-      ? entrada.archivosMultimedia
-      : Array.isArray(entrada.imagenesReferencia)
-      ? entrada.imagenesReferencia.map((url, idx) => ({
-          tipo: "imagen" as const,
-          url,
-          nombre: `referencia_${idx + 1}.jpg`,
-          mimeType: "image/jpeg",
-        }))
-      : [];
-
-  const archivosImagen = archivosMultimedia.filter((a) => a.tipo === "imagen");
-  const archivosAudioVideo = archivosMultimedia.filter(
-    (a) => a.tipo === "audio" || a.tipo === "video"
+  // Separamos estrictamente imágenes (para Visión) y audios/videos (para Whisper con audio_url)
+  const { archivosImagen, archivosAudioVideo } = separarArchivosPorTipoEstricto(
+    entrada.archivosMultimedia,
+    entrada.imagenesReferencia
   );
+  const archivosMultimedia: ArchivoMultimediaGuardado[] = [
+    ...archivosImagen,
+    ...archivosAudioVideo,
+  ];
 
-  // 1. Ojos y Oídos del Agente en paralelo (Visión + Whisper)
+  // 1. Ojos y Oídos del Agente en paralelo (Visión solo recibe imágenes; Whisper solo recibe audio/video con audio_url)
   const [fichaIdentidadVisual, transcripcionesAudioVideo] = await Promise.all([
     inspeccionarImagenesConFal(archivosImagen, entrada.ideaOriginal),
     transcribirAudiosYVideosConWhisper(archivosAudioVideo),

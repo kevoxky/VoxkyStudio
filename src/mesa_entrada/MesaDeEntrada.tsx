@@ -68,6 +68,8 @@ export function MesaDeEntrada() {
   const [arrastrandoArchivos, setArrastrandoArchivos] =
     useState<boolean>(false);
   const [estaGuardando, setEstaGuardando] = useState<boolean>(false);
+  const [textoProgresoEnvio, setTextoProgresoEnvio] =
+    useState<string>(TEXTO_CARGA_ESTUDIO);
   const [mensajeError, setMensajeError] = useState<string | null>(null);
 
   // Cálculo dinámico en tiempo real del modo, costo por minuto y presupuesto total según la duración
@@ -112,8 +114,8 @@ export function MesaDeEntrada() {
   }
 
   /**
-   * Se ejecuta al pulsar el botón circular de envío (↑): guarda fotos, modelos y presupuesto en Firebase y abre /estudio/[id].
-   * Recibe el evento del formulario y navega automáticamente a la sala del estudio.
+   * Se ejecuta al pulsar el botón circular de envío (↑): muestra el avance real paso a paso y abre /estudio/[id].
+   * Recibe el evento del formulario y usa try / catch / finally estricto para que jamás se quede colgado el spinner.
    */
   async function manejarEnvioProduccion(
     evento: React.FormEvent<HTMLFormElement>
@@ -122,9 +124,14 @@ export function MesaDeEntrada() {
     setMensajeError(null);
     setEstaGuardando(true);
 
-    try {
-      const archivosParaSubir = imagenesCargadas.map((item) => item.archivo);
+    const archivosParaSubir = imagenesCargadas.map((item) => item.archivo);
+    setTextoProgresoEnvio(
+      archivosParaSubir.length > 0
+        ? `Subiendo archivos multimedia (1 de ${archivosParaSubir.length})...`
+        : "Guardando proyecto en la base de datos..."
+    );
 
+    try {
       const nuevoProyectoId = await crearProyectoEnFirestore({
         ideaOriginal,
         formato: formatoSeleccionado,
@@ -137,8 +144,10 @@ export function MesaDeEntrada() {
         presupuestoTotalEstimadoUSD,
         idiomaSalida,
         archivosReferencia: archivosParaSubir,
+        alInformarProgreso: (mensajePaso) => setTextoProgresoEnvio(mensajePaso),
       });
 
+      setTextoProgresoEnvio("Entrando a la sala de estudio...");
       enrutador.push(`/estudio/${nuevoProyectoId}`);
     } catch (error) {
       const textoExplicativo =
@@ -147,6 +156,7 @@ export function MesaDeEntrada() {
           : "Ocurrió un problema inesperado al preparar tu estudio. Inténtalo de nuevo.";
 
       setMensajeError(textoExplicativo);
+    } finally {
       setEstaGuardando(false);
     }
   }
@@ -227,7 +237,7 @@ export function MesaDeEntrada() {
           {estaGuardando && (
             <div className="mb-3 flex items-center gap-2.5 rounded-2xl border border-indigo-200 bg-indigo-50/80 px-4 py-2.5 text-xs sm:text-sm font-semibold text-indigo-800">
               <span className="h-4 w-4 rounded-full border-2 border-indigo-300 border-t-indigo-700 animate-spin shrink-0" />
-              <span>{TEXTO_CARGA_ESTUDIO}</span>
+              <span>{textoProgresoEnvio}</span>
             </div>
           )}
 

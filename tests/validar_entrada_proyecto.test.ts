@@ -10,6 +10,8 @@ import {
   detectarModoCalidad,
   detectarTipoArchivoMultimedia,
   formatearDuracionCustom,
+  obtenerMimeTypeSeguro,
+  separarArchivosPorTipoEstricto,
   validarDatosFinancierosProyecto,
   validarDuracionObjetivo,
   validarFormatoVideo,
@@ -60,6 +62,50 @@ describe("Validaciones Multimedia, Presupuesto USD y Agente Productor Ejecutivo 
       true
     );
     assert.equal(MODELOS_INTERNOS_POR_DEFECTO.transcripcionAudio, "fal-ai/whisper");
+  });
+
+  it("procesa Prueba 2 (1 canción .mp3 + 2 imágenes .png) sin errores MIME y separa estrictamente Visión vs Whisper", () => {
+    // Incluso si el navegador en Windows envía type vacío ("") para el .mp3
+    const cancionMp3 = { name: "mi_cancion.mp3", size: 8_500_000, type: "" };
+    const personaje1 = { name: "cantante_principal.png", size: 1_200_000, type: "image/png" };
+    const personaje2 = { name: "baterista.png", size: 950_000, type: "" };
+
+    const validacion = validarImagenesReferencia([cancionMp3, personaje1, personaje2]);
+    assert.equal(validacion.esValido, true);
+
+    assert.equal(obtenerMimeTypeSeguro(cancionMp3), "audio/mpeg");
+    assert.equal(obtenerMimeTypeSeguro(personaje1), "image/png");
+    assert.equal(obtenerMimeTypeSeguro(personaje2), "image/png");
+
+    // Verificamos separación estricta para que .mp3 jamás vaya a Visión (image_urls)
+    const { archivosImagen, archivosAudioVideo } = separarArchivosPorTipoEstricto(
+      [
+        {
+          tipo: "audio",
+          url: "https://storage.ejemplo.com/1_mi_cancion.mp3",
+          nombre: "mi_cancion.mp3",
+          mimeType: "audio/mpeg",
+        },
+        {
+          tipo: "imagen",
+          url: "https://storage.ejemplo.com/2_cantante_principal.png",
+          nombre: "cantante_principal.png",
+          mimeType: "image/png",
+        },
+        {
+          tipo: "imagen",
+          url: "https://storage.ejemplo.com/3_baterista.png",
+          nombre: "baterista.png",
+          mimeType: "image/png",
+        },
+      ],
+      []
+    );
+
+    assert.equal(archivosImagen.length, 2);
+    assert.equal(archivosAudioVideo.length, 1);
+    assert.equal(archivosAudioVideo[0].nombre, "mi_cancion.mp3");
+    assert.ok(archivosImagen.every((img) => !img.url.endsWith(".mp3")));
   });
 
   it("calcula el costo real por minuto y el presupuesto total según el modo y la duración", () => {

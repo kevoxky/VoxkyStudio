@@ -1,7 +1,8 @@
-// Valida los datos del proyecto, archivos multimedia (imagen, audio, video) y costos estimados en USD.
-// Se conecta con constantes_mesa_entrada.ts, ZonaImagenesReferencia.tsx, subir_imagenes_referencia.ts y crear_documento_proyecto.ts.
+// Valida los datos del proyecto, archivos multimedia (imagen, audio, video), tipos MIME seguros y costos en USD.
+// Se conecta con constantes_mesa_entrada.ts, subir_imagenes_referencia.ts, inspector_multimodal_fal.ts y tests/.
 
 import {
+  type ArchivoMultimediaGuardado,
   CANTIDAD_MAXIMA_CUSTOM,
   CANTIDAD_MINIMA_CUSTOM,
   CARPETA_STORAGE_REFERENCIAS,
@@ -188,28 +189,115 @@ export function detectarTipoArchivoMultimedia(
   const mime = (archivo.type || "").toLowerCase();
   const nombre = (archivo.name || "").toLowerCase();
 
-  if (
-    TIPOS_IMAGEN_PERMITIDOS.includes(mime) ||
-    /\.(jpg|jpeg|png|webp)$/.test(nombre)
-  ) {
-    return "imagen";
-  }
-
-  if (
-    TIPOS_AUDIO_PERMITIDOS.includes(mime) ||
-    /\.(mp3|wav|m4a)$/.test(nombre)
-  ) {
+  // Primero verificamos por extensión explícita por si el navegador envía un MIME vacío o genérico
+  if (/\.(mp3|wav|m4a)$/.test(nombre) || TIPOS_AUDIO_PERMITIDOS.includes(mime)) {
     return "audio";
   }
 
   if (
-    TIPOS_VIDEO_PERMITIDOS.includes(mime) ||
-    /\.(mp4|mov|webm)$/.test(nombre)
+    /\.(mp4|mov|webm)$/.test(nombre) ||
+    TIPOS_VIDEO_PERMITIDOS.includes(mime)
   ) {
     return "video";
   }
 
+  if (
+    /\.(jpg|jpeg|png|webp)$/.test(nombre) ||
+    TIPOS_IMAGEN_PERMITIDOS.includes(mime)
+  ) {
+    return "imagen";
+  }
+
   return null;
+}
+
+/**
+ * Obtiene un tipo MIME estándar garantizado a partir del archivo y su nombre para evitar rechazos en Storage o fal.ai.
+ * Recibe el archivo con su nombre y tipo original y devuelve un MIME válido (ej. "audio/mpeg", "image/png").
+ */
+export function obtenerMimeTypeSeguro(archivo: {
+  name: string;
+  type?: string;
+}): string {
+  const nombre = (archivo.name || "").toLowerCase();
+  const mimeOriginal = (archivo.type || "").toLowerCase().trim();
+
+  if (nombre.endsWith(".mp3")) return "audio/mpeg";
+  if (nombre.endsWith(".wav")) return "audio/wav";
+  if (nombre.endsWith(".m4a")) return "audio/mp4";
+  if (nombre.endsWith(".mp4")) return "video/mp4";
+  if (nombre.endsWith(".mov")) return "video/quicktime";
+  if (nombre.endsWith(".webm")) return "video/webm";
+  if (nombre.endsWith(".png")) return "image/png";
+  if (nombre.endsWith(".webp")) return "image/webp";
+  if (nombre.endsWith(".jpg") || nombre.endsWith(".jpeg")) return "image/jpeg";
+
+  return mimeOriginal || "application/octet-stream";
+}
+
+/**
+ * Separa estrictamente los archivos en Imágenes (para Visión) y Audios/Videos (para Whisper), impidiendo mezclar URLs.
+ * Recibe la lista de archivos multimedia o URLs y devuelve dos listas separadas y garantizadas.
+ */
+export function separarArchivosPorTipoEstricto(
+  archivosMultimedia?: ArchivoMultimediaGuardado[],
+  imagenesReferencia?: string[]
+): {
+  archivosImagen: ArchivoMultimediaGuardado[];
+  archivosAudioVideo: ArchivoMultimediaGuardado[];
+} {
+  const listaBase: ArchivoMultimediaGuardado[] =
+    Array.isArray(archivosMultimedia) && archivosMultimedia.length > 0
+      ? archivosMultimedia
+      : Array.isArray(imagenesReferencia)
+      ? imagenesReferencia.map((url, idx) => {
+          const urlSinParams = url.split("?")[0].toLowerCase();
+          const esAudio = /\.(mp3|wav|m4a)$/i.test(urlSinParams);
+          const esVideo = /\.(mp4|mov|webm)$/i.test(urlSinParams);
+          const tipo: TipoArchivoReferencia = esAudio
+            ? "audio"
+            : esVideo
+            ? "video"
+            : "imagen";
+
+          return {
+            tipo,
+            url,
+            nombre: `referencia_${idx + 1}`,
+            mimeType:
+              tipo === "audio"
+                ? "audio/mpeg"
+                : tipo === "video"
+                ? "video/mp4"
+                : "image/jpeg",
+          };
+        })
+      : [];
+
+  const archivosImagen: ArchivoMultimediaGuardado[] = [];
+  const archivosAudioVideo: ArchivoMultimediaGuardado[] = [];
+
+  for (const item of listaBase) {
+    const nombreOUrl = `${item.nombre || ""} ${item.url.split("?")[0]}`.toLowerCase();
+    const pareceAudioOVideo = /\.(mp3|wav|m4a|mp4|mov|webm)(\b|$)/i.test(
+      nombreOUrl
+    );
+
+    if (
+      item.tipo === "audio" ||
+      item.tipo === "video" ||
+      pareceAudioOVideo
+    ) {
+      archivosAudioVideo.push({
+        ...item,
+        tipo: item.tipo === "imagen" ? "audio" : item.tipo,
+      });
+    } else if (item.tipo === "imagen") {
+      archivosImagen.push(item);
+    }
+  }
+
+  return { archivosImagen, archivosAudioVideo };
 }
 
 /**

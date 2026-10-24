@@ -1,4 +1,4 @@
-// Crea la ficha maestra del proyecto en la colección "proyectos" de Firestore con archivos multimedia tipados y costos en USD.
+// Crea la ficha maestra del proyecto en la colección "proyectos" de Firestore informando el progreso paso a paso.
 // Se conecta con src/configuracion/cliente_firebase.ts, constantes_mesa_entrada.ts, validar_entrada_proyecto.ts y subir_imagenes_referencia.ts.
 
 import { collection, doc, setDoc, serverTimestamp } from "firebase/firestore";
@@ -38,6 +38,7 @@ export interface DatosEntradaProyecto {
   presupuestoTotalEstimadoUSD: number;
   idiomaSalida: IdiomaSalidaVideo;
   archivosReferencia: File[];
+  alInformarProgreso?: (mensaje: string) => void;
 }
 
 /**
@@ -78,7 +79,7 @@ function verificarDatosAntesDeGuardar(datos: DatosEntradaProyecto): void {
 }
 
 /**
- * Sube primero los archivos multimedia a referencias/{proyectoId}/ y luego crea el documento en la colección "proyectos".
+ * Sube los archivos multimedia (con progreso real y respaldo en fal.ai) y guarda el proyecto en Firestore.
  * Recibe las preferencias de la Mesa de Entrada y devuelve el identificador único del proyecto creado.
  */
 export async function crearProyectoEnFirestore(
@@ -92,18 +93,23 @@ export async function crearProyectoEnFirestore(
   const referenciaDocumento = doc(referenciaColeccion);
   const proyectoId = referenciaDocumento.id;
 
-  // Paso 1: Subimos imágenes, audios o videos a Firebase Storage guardando su tipo ('imagen' | 'audio' | 'video') y URL
+  // Paso 1: Subimos imágenes, audios o videos mostrando "Subiendo archivos multimedia (X de Y)..."
   const archivosMultimedia = await subirArchivosMultimediaStorage(
     proyectoId,
-    datos.archivosReferencia
+    datos.archivosReferencia,
+    datos.alInformarProgreso
   );
 
-  // Mantenemos también la lista simple de URLs en imagenesReferencia por compatibilidad
-  const enlacesCompatibles = archivosMultimedia.map((item) => item.url);
+  // En imagenesReferencia guardamos exclusivamente las URLs de tipo "imagen" para no mezclar audios ni videos
+  const enlacesSoloImagenes = archivosMultimedia
+    .filter((item) => item.tipo === "imagen")
+    .map((item) => item.url);
 
-  // Paso 2: Guardamos la ficha maestra en la colección "proyectos"
+  // Paso 2: Informamos el guardado en Firestore y aplicamos timeout de seguridad
+  datos.alInformarProgreso?.("Guardando proyecto en la base de datos...");
+
   try {
-    await setDoc(referenciaDocumento, {
+    const promesaEscritura = setDoc(referenciaDocumento, {
       ideaOriginal: datos.ideaOriginal.trim(),
       formato: datos.formato,
       duracionObjetivo: datos.duracionObjetivo,
@@ -116,16 +122,33 @@ export async function crearProyectoEnFirestore(
       presupuestoTotalEstimadoUSD: datos.presupuestoTotalEstimadoUSD,
       modelosInternos: { ...MODELOS_INTERNOS_POR_DEFECTO },
       idiomaSalida: datos.idiomaSalida,
-      imagenesReferencia: enlacesCompatibles,
+      imagenesReferencia: enlacesSoloImagenes,
       archivosMultimedia,
       estado: ESTADO_ANALIZANDO_IDEA,
       fechaCreacion: serverTimestamp(),
     });
 
+    await Promise.race([
+      promesaEscritura,
+      new Promise((_, rechazar) =>
+        setTimeout(
+          () =>
+            rechazar(
+              new Error(
+                "Tiempo agotado al guardar en Firestore. Revisa tu conexión a internet."
+              )
+            ),
+          25_000
+        )
+      ),
+    ]);
+
     return proyectoId;
   } catch (error) {
     throw new Error(
-      "No se pudo guardar la ficha del proyecto en Firebase Firestore. Verifica tu conexión y las reglas de Firestore."
+      error instanceof Error
+        ? error.message
+        : "No se pudo guardar la ficha del proyecto en Firebase Firestore."
     );
   }
 }

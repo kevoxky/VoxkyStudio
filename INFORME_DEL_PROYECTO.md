@@ -45,6 +45,12 @@ Imagina que entras a una agencia de cine real:
 ---
 
 ## (d) ¿Qué se ha hecho hasta ahora? (Diario de sesiones)
+### Sesión del 24 de octubre de 2026 (Blindaje de Subida de Canciones/Videos, Respaldo fal.ai y Acordeón de Letra)
+- **Subida blindada con respaldo automático (`fal.storage.upload`):** Se ajustaron los tiempos de espera en `subir_imagenes_referencia.ts` (máximo 45s) y se conectó el almacenamiento seguro de `fal.ai` como salvavidas automático si Firebase Storage tarda o rechaza un `.mp3`, `.wav` o `.mp4` por reglas o CORS.
+- **Avance real paso a paso en `MesaDeEntrada.tsx`:** Ahora ves en vivo *"Subiendo archivos multimedia (1 de 3)..."*, *"Guardando proyecto en la base de datos..."* y *"Entrando a la sala de estudio..."*, protegido con `try / catch / finally` para que nunca se quede congelado.
+- **Separación estricta de Ojos y Oídos:** Se blindó `inspector_multimodal_fal.ts` para que las fotos vayan únicamente a `fal-ai/any-llm/vision` y las canciones/videos vayan únicamente a `fal-ai/whisper` (`audio_url`).
+- **Acordeones desplegables en la Sala de Estudio:** En `/estudio/[id]` ahora puedes abrir con un clic *"👁️ Ficha de Identidad Visual (Clic para ver descripción)"* y *"🎵 Letra / Audio escuchado por el Agente (Clic para ver transcripción)"* con todas las marcas de tiempo de tu canción.
+
 ### Sesión del 24 de octubre de 2026 (Paso 2: Agente Productor Ejecutivo Multimodal y Clarificador Elástico)
 - Se amplió el botón `+` para aceptar **imágenes, canciones/audios (`.mp3`, `.wav`, `.m4a`) y videos (`.mp4`, `.mov`, `.webm`)**, guardando el tipo de cada archivo en Firebase.
 - Se creó el **Agente Productor Ejecutivo** que clasifica automáticamente cada proyecto en una de las **5 líneas de producción** (Videoclip Musical, Publicidad Comercial, Contenido Redes/Influencer, Traducción/Doblaje de Video o Cine/Serie/Storyboard).

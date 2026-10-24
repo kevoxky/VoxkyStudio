@@ -1,5 +1,13 @@
 # Registro de Cambios (CAMBIOS.md)
 
+## 2026-10-24 — Blindaje Multimedia del Paso 2: Subida con Respaldo fal.ai, Progreso en Vivo, Separación Visión/Whisper y Acordeón de Letra
+- Se actualizaron `storage.rules` y `validar_entrada_proyecto.ts` para aceptar sin bloqueos `image/*`, `audio/*` y `video/*` (`.mp3`, `.wav`, `.m4a`, `.mp4`, `.mov`, `.webm`) de hasta 100 MB incluso cuando el navegador no envía tipo MIME estándar.
+- Se blindó `subir_imagenes_referencia.ts` con límite de espera por archivo y **respaldo automático (`fal.storage.upload` vía `/api/fal/proxy`)** si Firebase Storage falla por reglas, CORS o timeout.
+- Se actualizó `MesaDeEntrada.tsx` con estado de progreso paso a paso en vivo (*"Subiendo archivos multimedia (1 de 3)..."*, *"Guardando proyecto en la base de datos..."*, *"Entrando a la sala de estudio..."*) y bloque `try / catch / finally` estricto.
+- Se reforzó la separación estricta en `inspector_multimodal_fal.ts` y `validar_entrada_proyecto.ts`: las imágenes van exclusivamente a `fal-ai/any-llm/vision` y los audios/videos van exclusivamente a `fal-ai/whisper` (`audio_url`).
+- Se agregaron en `PanelClarificacionDirector.tsx` los acordeones desplegables limpios: *"👁️ Ficha de Identidad Visual (Clic para ver descripción)"* y *"🎵 Letra / Audio escuchado por el Agente (Clic para ver transcripción)"*.
+- Se ampliaron las pruebas unitarias en `tests/validar_entrada_proyecto.test.ts` verificando el flujo con 1 canción `.mp3` + 2 imágenes `.png`.
+
 ## 2026-10-24 — Paso 2: Agente Productor Ejecutivo Multimodal, Clarificador Elástico y 5 Líneas de Producción
 - Se creó la rama `paso-2-productor-ejecutivo` en Git.
 - Se amplió la entrada en `src/mesa_entrada/` y `storage.rules` para soportar **Imágenes** (`.jpg`, `.png`, `.webp`), **Audios** (`.mp3`, `.wav`, `.m4a`) y **Videos** (`.mp4`, `.mov`, `.webm`), guardando en Firestore `archivosMultimedia` con `tipo: 'imagen' | 'audio' | 'video'` y `url`.
