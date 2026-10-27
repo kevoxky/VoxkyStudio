@@ -8,6 +8,8 @@ import { useRouter } from "next/navigation";
 import { obtenerClienteFalSeguro } from "@/configuracion/cliente_fal";
 import {
   DURACION_POR_DEFECTO,
+  ESTILO_VISUAL_POR_DEFECTO,
+  type IdEstiloVisual,
   FORMATO_HORIZONTAL,
   type FormatoVideo,
   IDIOMAS_SALIDA_PERMITIDOS,
@@ -28,10 +30,12 @@ import {
   SelectorFormatoVideo,
 } from "./SelectorFormatoVideo";
 import { SelectorModeloConTooltip } from "./SelectorModeloConTooltip";
+import { SelectorEstiloVisual } from "./SelectorEstiloVisual";
 import {
   BotonAdjuntarImagenes,
   FilaMiniaturasReferencia,
   type ImagenConVistaPrevia,
+  agregarActivosDesdeBiblioteca,
   agregarImagenesReferenciaValidas,
 } from "./ZonaImagenesReferencia";
 import {
@@ -40,6 +44,7 @@ import {
   detectarModoCalidad,
 } from "./validar_entrada_proyecto";
 import { crearProyectoEnFirestore } from "./crear_documento_proyecto";
+import { HistorialProyectos } from "./HistorialProyectos";
 
 /**
  * Muestra la Mesa de Entrada con la tarjeta de comando unificada, perfiles Rápido/Pro/Máximo y cálculo de presupuesto en vivo.
@@ -58,6 +63,9 @@ export function MesaDeEntrada() {
   );
   const [modeloVideo, setModeloVideo] = useState<string>(
     MODELO_VIDEO_POR_DEFECTO
+  );
+  const [estiloVisual, setEstiloVisual] = useState<IdEstiloVisual>(
+    ESTILO_VISUAL_POR_DEFECTO
   );
   const [idiomaSalida, setIdiomaSalida] = useState<IdiomaSalidaVideo>(
     IDIOMA_SALIDA_POR_DEFECTO
@@ -103,7 +111,7 @@ export function MesaDeEntrada() {
    */
   function quitarImagenPorIndice(indiceAQuitar: number) {
     const imagenAQuitar = imagenesCargadas[indiceAQuitar];
-    if (imagenAQuitar) {
+    if (imagenAQuitar && imagenAQuitar.urlVistaPrevia.startsWith("blob:")) {
       URL.revokeObjectURL(imagenAQuitar.urlVistaPrevia);
     }
 
@@ -124,10 +132,18 @@ export function MesaDeEntrada() {
     setMensajeError(null);
     setEstaGuardando(true);
 
-    const archivosParaSubir = imagenesCargadas.map((item) => item.archivo);
+    const archivosParaSubir = imagenesCargadas
+      .filter((item) => !item.activoBiblioteca)
+      .map((item) => item.archivo);
+    const activosBibliotecaElegidos = imagenesCargadas
+      .map((item) => item.activoBiblioteca)
+      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
     setTextoProgresoEnvio(
       archivosParaSubir.length > 0
-        ? `Subiendo archivos multimedia (1 de ${archivosParaSubir.length})...`
+        ? `Verificando en Biblioteca / Subiendo archivos (1 de ${archivosParaSubir.length})...`
+        : activosBibliotecaElegidos.length > 0
+        ? `Reutilizando ${activosBibliotecaElegidos.length} activo(s) de tu Biblioteca Global...`
         : "Guardando proyecto en la base de datos..."
     );
 
@@ -139,11 +155,13 @@ export function MesaDeEntrada() {
         toleranciaFlexible: TOLERANCIA_FLEXIBLE_POR_DEFECTO,
         modeloImagen,
         modeloVideo,
+        estiloVisualSeleccionado: estiloVisual,
         modoCalidad: modoCalidadActual,
         costoEstimadoPorMinutoUSD,
         presupuestoTotalEstimadoUSD,
         idiomaSalida,
         archivosReferencia: archivosParaSubir,
+        activosBibliotecaSeleccionados: activosBibliotecaElegidos,
         alInformarProgreso: (mensajePaso) => setTextoProgresoEnvio(mensajePaso),
       });
 
@@ -254,6 +272,14 @@ export function MesaDeEntrada() {
                     setMensajeError
                   )
                 }
+                alSeleccionarDeBiblioteca={(activos) =>
+                  agregarActivosDesdeBiblioteca(
+                    imagenesCargadas,
+                    activos,
+                    setImagenesCargadas,
+                    setMensajeError
+                  )
+                }
                 deshabilitado={estaGuardando}
               />
 
@@ -284,6 +310,12 @@ export function MesaDeEntrada() {
                 modelosDisponibles={MODELOS_VIDEO_FAL}
                 idModeloSeleccionado={modeloVideo}
                 alSeleccionarModelo={setModeloVideo}
+                deshabilitado={estaGuardando}
+              />
+
+              <SelectorEstiloVisual
+                estiloSeleccionado={estiloVisual}
+                alCambiarEstilo={setEstiloVisual}
                 deshabilitado={estaGuardando}
               />
             </div>
@@ -397,6 +429,9 @@ export function MesaDeEntrada() {
             </span>
           </div>
         </div>
+
+        {/* Sección "📂 Mis Proyectos Recientes" en tiempo real con opciones para continuar o eliminar */}
+        <HistorialProyectos />
       </div>
     </main>
   );

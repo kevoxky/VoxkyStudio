@@ -1,5 +1,5 @@
 // Reglas de seguridad de Firebase Firestore para VoxkyStudio.
-// Permiten leer y crear fichas maestras válidas dentro de la colección "proyectos" con los 6 formatos soportados.
+// Permiten leer y crear fichas maestras válidas en "proyectos" y gestionar la colección global "biblioteca_activos".
 
 rules_version = '2';
 
@@ -13,6 +13,11 @@ service cloud.firestore {
                     && request.resource.data.formato in ['16:9', '9:16', '1:1', '4:5', '4:3', '21:9']
                     && request.resource.data.estado == 'analizando_idea';
       allow update: if true;
+      allow delete: if true;
+    }
+
+    match /biblioteca_activos/{activoId} {
+      allow read, write: if true;
     }
   }
 }

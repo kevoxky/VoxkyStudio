@@ -1,5 +1,5 @@
-// Crea la ficha maestra del proyecto en la colección "proyectos" de Firestore informando el progreso paso a paso.
-// Se conecta con src/configuracion/cliente_firebase.ts, constantes_mesa_entrada.ts, validar_entrada_proyecto.ts y subir_imagenes_referencia.ts.
+// Crea la ficha maestra del proyecto en la colección "proyectos" de Firestore reutilizando activos de Biblioteca Global.
+// Se conecta con cliente_firebase.ts, constantes_mesa_entrada.ts, validar_entrada_proyecto.ts, subir_imagenes_referencia.ts y gestor_biblioteca_activos.ts.
 
 import { collection, doc, setDoc, serverTimestamp } from "firebase/firestore";
 import {
@@ -7,6 +7,13 @@ import {
   verificarConfiguracionFirebase,
 } from "@/configuracion/cliente_firebase";
 import {
+  buscarActivoPorHashEnFirestore,
+  construirClaveCacheLamina360,
+} from "@/biblioteca/gestor_biblioteca_activos";
+import { type ActivoBibliotecaGlobal } from "@/biblioteca/tipos_biblioteca";
+import { type Lamina360Identidad } from "@/agentes/director_arte/tipos_director_arte";
+import {
+  type ArchivoMultimediaGuardado,
   COLECCION_PROYECTOS,
   ESTADO_ANALIZANDO_IDEA,
   type FormatoVideo,
@@ -33,11 +40,13 @@ export interface DatosEntradaProyecto {
   toleranciaFlexible?: boolean;
   modeloImagen: string;
   modeloVideo: string;
+  estiloVisualSeleccionado?: string;
   modoCalidad: ModoCalidadProduccion;
   costoEstimadoPorMinutoUSD: number;
   presupuestoTotalEstimadoUSD: number;
   idiomaSalida: IdiomaSalidaVideo;
   archivosReferencia: File[];
+  activosBibliotecaSeleccionados?: ActivoBibliotecaGlobal[];
   alInformarProgreso?: (mensaje: string) => void;
 }
 
@@ -79,8 +88,8 @@ function verificarDatosAntesDeGuardar(datos: DatosEntradaProyecto): void {
 }
 
 /**
- * Sube los archivos multimedia (con progreso real y respaldo en fal.ai) y guarda el proyecto en Firestore.
- * Recibe las preferencias de la Mesa de Entrada y devuelve el identificador único del proyecto creado.
+ * Sube los archivos multimedia nuevos (con deduplicación SHA-256), integra los elegidos de la Biblioteca
+ * y guarda la ficha maestra del proyecto en Firestore precargando Láminas 360° si ya existen.
  */
 export async function crearProyectoEnFirestore(
   datos: DatosEntradaProyecto
@@ -92,20 +101,88 @@ export async function crearProyectoEnFirestore(
   const referenciaColeccion = collection(baseDeDatos, COLECCION_PROYECTOS);
   const referenciaDocumento = doc(referenciaColeccion);
   const proyectoId = referenciaDocumento.id;
+  const estiloElegido = datos.estiloVisualSeleccionado || "original_referencia";
 
-  // Paso 1: Subimos imágenes, audios o videos mostrando "Subiendo archivos multimedia (X de Y)..."
-  const archivosMultimedia = await subirArchivosMultimediaStorage(
+  // Paso 1: Subimos o deduplicamos por hash SHA-256 los archivos nuevos subidos desde el equipo
+  const archivosDesdeEquipo = await subirArchivosMultimediaStorage(
     proyectoId,
     datos.archivosReferencia,
     datos.alInformarProgreso
   );
 
-  // En imagenesReferencia guardamos exclusivamente las URLs de tipo "imagen" para no mezclar audios ni videos
+  // Paso 2: Convertimos los activos elegidos desde el Modal de Biblioteca sin volver a subir nada
+  const activosDeBiblioteca = datos.activosBibliotecaSeleccionados ?? [];
+  const archivosDesdeBiblioteca: ArchivoMultimediaGuardado[] =
+    activosDeBiblioteca.map((activo) => ({
+      tipo: activo.tipo,
+      url: activo.url,
+      nombre: activo.nombre,
+      mimeType: activo.mimeType,
+      hashArchivo: activo.hashArchivo,
+      activoBibliotecaId: activo.id,
+      reutilizadoDeBiblioteca: true,
+      ...(typeof activo.duracionSegundos === "number"
+        ? { duracionSegundos: activo.duracionSegundos }
+        : {}),
+    }));
+
+  const archivosMultimedia: ArchivoMultimediaGuardado[] = [
+    ...archivosDesdeEquipo,
+    ...archivosDesdeBiblioteca,
+  ];
+
+  // En imagenesReferencia guardamos exclusivamente las URLs de tipo "imagen"
   const enlacesSoloImagenes = archivosMultimedia
     .filter((item) => item.tipo === "imagen")
     .map((item) => item.url);
 
-  // Paso 2: Informamos el guardado en Firestore y aplicamos timeout de seguridad
+  // Paso 3: Si algún personaje o producto ya tiene Lámina 360° de vestuario_base para este estilo en la Biblioteca, la precargamos gratis
+  const laminasPrecargadas: Lamina360Identidad[] = [];
+  const claveBaseEstilo = construirClaveCacheLamina360(
+    "vestuario_base",
+    estiloElegido
+  );
+
+  for (const archivoItem of archivosMultimedia) {
+    if (archivoItem.tipo !== "imagen" || !archivoItem.hashArchivo) continue;
+
+    let activoEnCache = activosDeBiblioteca.find(
+      (a) => a.hashArchivo === archivoItem.hashArchivo
+    );
+    if (!activoEnCache) {
+      activoEnCache =
+        (await buscarActivoPorHashEnFirestore(archivoItem.hashArchivo)) ??
+        undefined;
+    }
+
+    const laminaGuardada =
+      activoEnCache?.laminas360PorVestuario?.[claveBaseEstilo];
+    if (laminaGuardada && laminaGuardada.urlLamina360) {
+      laminasPrecargadas.push({
+        id: `lamina_${archivoItem.nombre.replace(/[^a-zA-Z0-9_-]/g, "_")}__vestuario_base`,
+        nombreReferencia: archivoItem.nombre,
+        urlReferenciaOriginal: archivoItem.url,
+        tipo:
+          activoEnCache?.categoriaActivo === "producto"
+            ? "producto"
+            : "personaje",
+        urlLamina360: laminaGuardada.urlLamina360,
+        promptUsado:
+          laminaGuardada.promptUsado ||
+          "Lámina 360° reutilizada automáticamente desde Biblioteca Global.",
+        fechaCreacion: laminaGuardada.fechaCreacion,
+        estado: "lista",
+        estiloVisualAplicado: estiloElegido,
+        idVestuario: "vestuario_base",
+        descripcionVestuario: laminaGuardada.descripcionVestuario,
+        identidadFisicaInmutable:
+          activoEnCache?.fichaIdentidadBase?.identidadFisicaInmutable,
+        reutilizadaDeBiblioteca: true,
+      });
+    }
+  }
+
+  // Paso 4: Informamos el guardado en Firestore y aplicamos timeout de seguridad
   datos.alInformarProgreso?.("Guardando proyecto en la base de datos...");
 
   try {
@@ -117,13 +194,17 @@ export async function crearProyectoEnFirestore(
         datos.toleranciaFlexible ?? TOLERANCIA_FLEXIBLE_POR_DEFECTO,
       modeloImagen: datos.modeloImagen,
       modeloVideo: datos.modeloVideo,
+      estiloVisualSeleccionado: estiloElegido,
       modoCalidad: datos.modoCalidad,
       costoEstimadoPorMinutoUSD: datos.costoEstimadoPorMinutoUSD,
       presupuestoTotalEstimadoUSD: datos.presupuestoTotalEstimadoUSD,
       modelosInternos: { ...MODELOS_INTERNOS_POR_DEFECTO },
       idiomaSalida: datos.idiomaSalida,
       imagenesReferencia: enlacesSoloImagenes,
-      archivosMultimedia,
+      archivosMultimedia: JSON.parse(JSON.stringify(archivosMultimedia)),
+      ...(laminasPrecargadas.length > 0
+        ? { laminas360: JSON.parse(JSON.stringify(laminasPrecargadas)) }
+        : {}),
       estado: ESTADO_ANALIZANDO_IDEA,
       fechaCreacion: serverTimestamp(),
     });

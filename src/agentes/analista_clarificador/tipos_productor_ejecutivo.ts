@@ -29,12 +29,21 @@ export interface ResultadoTranscripcionAudio {
   textoCompleto: string;
   idiomaDetectado: string;
   ritmoYTono: string;
+  duracionTotalSegundos?: number;
   segmentosConTiempo: MarcaTiempoTranscripcion[];
+}
+
+export interface DesglosePersonajeIdentidadYVestuario {
+  nombreArchivo: string;
+  urlImagen?: string;
+  identidadFisicaInmutable: string;
+  vestuarioOriginalFoto: string;
 }
 
 export interface FichaIdentidadVisual {
   resumenVisual: string;
   detallesPorImagen: string[];
+  personajesSeparados?: DesglosePersonajeIdentidadYVestuario[];
 }
 
 export interface PreguntaClarificacionDirector {

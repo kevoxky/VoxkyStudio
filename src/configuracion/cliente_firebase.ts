@@ -1,9 +1,9 @@
 // Configura la conexión única con Firebase Firestore (base de datos) y Firebase Storage (archivos).
 // Se conecta con src/mesa_entrada/subir_imagenes_referencia.ts, src/mesa_entrada/crear_documento_proyecto.ts y src/estudio/VistaEstudioInicial.tsx.
 
-import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
-import { getFirestore, Firestore } from "firebase/firestore";
-import { getStorage, FirebaseStorage } from "firebase/storage";
+import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
+import { getFirestore, type Firestore } from "firebase/firestore";
+import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 // Datos de conexión leídos desde el archivo .env del proyecto
 const CONFIGURACION_FIREBASE = {

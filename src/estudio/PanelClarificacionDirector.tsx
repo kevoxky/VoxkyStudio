@@ -3,11 +3,46 @@
 
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   type AnalisisProductorEjecutivo,
   CATALOGO_CATEGORIAS_PRODUCCION,
+  type ResultadoTranscripcionAudio,
 } from "@/agentes/analista_clarificador/tipos_productor_ejecutivo";
+import { limpiarTextoFichaTecnica } from "@/agentes/analista_clarificador/inspector_multimodal_fal";
+import { reconciliarLetraYSegmentosCompletos } from "@/agentes/analista_clarificador/reconciliador_letra_whisper";
+import { leerDuracionMultimediaEnNavegador } from "@/mesa_entrada/ZonaImagenesReferencia";
+
+/**
+ * Convierte el texto con Markdown (**negritas**, ### títulos y * listas) en elementos limpios y fáciles de leer sin asteriscos sueltos.
+ * Recibe el texto crudo de la Ficha de Identidad Visual y devuelve párrafos con negritas reales.
+ */
+function renderizarFichaVisualLimpia(textoCrudo: string): React.ReactNode {
+  const lineas = String(textoCrudo ?? "")
+    .replace(/^#{1,6}\s*/gm, "")
+    .replace(/^\s*[-*]\s+/gm, "• ")
+    .split("\n");
+
+  return lineas.map((linea, idxLinea) => {
+    const partes = linea.split(/(\*\*[^*]+\*\*)/g);
+    return (
+      <React.Fragment key={idxLinea}>
+        {partes.map((fragmento, idxFrag) => {
+          if (fragmento.startsWith("**") && fragmento.endsWith("**")) {
+            const limpio = fragmento.slice(2, -2).replace(/\*/g, "").trim();
+            return (
+              <strong key={idxFrag} className="font-bold text-slate-900">
+                {limpio}
+              </strong>
+            );
+          }
+          return <span key={idxFrag}>{fragmento.replace(/\*\*/g, "")}</span>;
+        })}
+        {idxLinea < lineas.length - 1 && <br />}
+      </React.Fragment>
+    );
+  });
+}
 
 interface PropiedadesPanelClarificacion {
   proyectoId: string;
@@ -17,6 +52,7 @@ interface PropiedadesPanelClarificacion {
     analisisActualizado: AnalisisProductorEjecutivo,
     nuevoEstado: string
   ) => Promise<void>;
+  alPasarAlPaso3Guion?: () => void;
 }
 
 /**
@@ -28,12 +64,63 @@ export function PanelClarificacionDirector({
   estadoActual,
   analisis,
   alConfirmarClarificacion,
+  alPasarAlPaso3Guion,
 }: PropiedadesPanelClarificacion) {
   const [respuestas, setRespuestas] = useState<Record<string, string>>(
     analisis.respuestasUsuario ?? {}
   );
   const [enviandoDecisiones, setEnviandoDecisiones] = useState<boolean>(false);
+  const [recalculandoAudioUrl, setRecalculandoAudioUrl] = useState<
+    string | null
+  >(null);
+  const [reanalizandoFichas, setReanalizandoFichas] = useState<boolean>(false);
   const [mensajeError, setMensajeError] = useState<string | null>(null);
+  const autoReparacionIniciadaRef = useRef<boolean>(false);
+
+  /**
+   * Vuelve a analizar individualmente cada imagen del proyecto para actualizar su Ficha Técnica limpia.
+   */
+  async function volverAAnalizarFichasVisuales() {
+    setMensajeError(null);
+    setReanalizandoFichas(true);
+    try {
+      const respuestaHttp = await fetch("/api/agentes/analizar-idea", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proyectoId }),
+      });
+      const datos = await respuestaHttp.json();
+      if (!respuestaHttp.ok || !datos.ok) {
+        throw new Error(
+          datos.error ?? "No se pudieron actualizar las fichas técnicas visuales."
+        );
+      }
+    } catch (error) {
+      setMensajeError(
+        error instanceof Error
+          ? error.message
+          : "Error al volver a analizar las fichas técnicas."
+      );
+    } finally {
+      setReanalizandoFichas(false);
+    }
+  }
+
+  // Si detectamos que un proyecto guardado tenía el formato anterior con código JSON "{ resumenVisual" o texto genérico, lo repara solo
+  useEffect(() => {
+    if (autoReparacionIniciadaRef.current) return;
+    const lista = analisis.fichaIdentidadVisual?.personajesSeparados ?? [];
+    const tieneFormatoAntiguo = lista.some(
+      (p) =>
+        p.identidadFisicaInmutable.includes("resumenVisual") ||
+        p.identidadFisicaInmutable.includes("{") ||
+        p.vestuarioOriginalFoto.includes("Prendas, colores, calzado y texturas que lleva puestos")
+    );
+    if (tieneFormatoAntiguo) {
+      autoReparacionIniciadaRef.current = true;
+      volverAAnalizarFichasVisuales();
+    }
+  }, [analisis.fichaIdentidadVisual]);
 
   const infoCategoria =
     CATALOGO_CATEGORIAS_PRODUCCION[analisis.categoriaPrincipal] ??
@@ -48,6 +135,68 @@ export function PanelClarificacionDirector({
       ...previo,
       [idPregunta]: valor,
     }));
+  }
+
+  /**
+   * Recalcula el 100% de los segmentos de una canción o audio rescatando cualquier estrofa final hasta la duración total del archivo.
+   * Recibe la transcripción actual, mide la duración real del audio y guarda los segmentos reconciliados en Firestore.
+   */
+  async function recalcularSegmentosCompletosAudio(
+    transcripcion: ResultadoTranscripcionAudio
+  ) {
+    setMensajeError(null);
+    setRecalculandoAudioUrl(transcripcion.urlArchivo);
+
+    try {
+      const duracionNavegador = await leerDuracionMultimediaEnNavegador(
+        "audio",
+        transcripcion.urlArchivo
+      );
+      const ultimoActual =
+        transcripcion.segmentosConTiempo.length > 0
+          ? transcripcion.segmentosConTiempo[
+              transcripcion.segmentosConTiempo.length - 1
+            ].finSeg
+          : 0;
+
+      // Si el navegador lee la duración exacta, la usamos; si por CORS no expone metadata, tomamos la duración registrada o el último tramo conocido
+      const duracionObjetivo =
+        duracionNavegador ??
+        transcripcion.duracionTotalSegundos ??
+        (ultimoActual > 0 ? ultimoActual : undefined);
+
+      const nuevosSegmentos = reconciliarLetraYSegmentosCompletos(
+        transcripcion.textoCompleto,
+        transcripcion.segmentosConTiempo,
+        duracionObjetivo
+      );
+
+      const nuevasTranscripciones = analisis.transcripcionesAudioVideo.map(
+        (item) =>
+          item.urlArchivo === transcripcion.urlArchivo
+            ? {
+                ...item,
+                duracionTotalSegundos: duracionObjetivo,
+                segmentosConTiempo: nuevosSegmentos,
+              }
+            : item
+      );
+
+      const analisisActualizado: AnalisisProductorEjecutivo = {
+        ...analisis,
+        transcripcionesAudioVideo: nuevasTranscripciones,
+      };
+
+      await alConfirmarClarificacion(analisisActualizado, estadoActual);
+    } catch (error) {
+      setMensajeError(
+        error instanceof Error
+          ? error.message
+          : "No se pudieron recalcular los segmentos completos del audio."
+      );
+    } finally {
+      setRecalculandoAudioUrl(null);
+    }
   }
 
   /**
@@ -141,31 +290,101 @@ export function PanelClarificacionDirector({
         analisis.transcripcionesAudioVideo.length > 0) && (
         <div className="space-y-3">
           {analisis.fichaIdentidadVisual && (
-            <details className="group rounded-2xl border border-sky-200 bg-sky-50/60 p-4 transition-all">
-              <summary className="flex items-center justify-between gap-2 cursor-pointer list-none text-xs sm:text-sm font-bold text-sky-900">
+            <details
+              open
+              className="group rounded-2xl border border-sky-200 bg-sky-50/60 p-4 transition-all"
+            >
+              <summary className="flex flex-wrap items-center justify-between gap-2 cursor-pointer list-none text-xs sm:text-sm font-bold text-sky-900">
                 <span>
-                  👁️ Ficha de Identidad Visual (Clic para ver descripción)
+                  👁️ Fichas Técnicas de Personajes y Productos ({analisis.fichaIdentidadVisual.detallesPorImagen.length})
                 </span>
-                <span className="rounded-full bg-white border border-sky-200 px-2.5 py-0.5 text-[11px] font-semibold text-sky-800 group-open:bg-sky-700 group-open:text-white transition-colors">
-                  {analisis.fichaIdentidadVisual.detallesPorImagen.length}{" "}
-                  ref(s) ▾
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={reanalizandoFichas}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      volverAAnalizarFichasVisuales();
+                    }}
+                    className="rounded-full border border-sky-300 bg-white hover:bg-sky-100 px-3 py-1 text-[11px] font-bold text-sky-900 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {reanalizandoFichas
+                      ? "⏳ Analizando cada imagen..."
+                      : "🔄 Actualizar fichas técnicas"}
+                  </button>
+                  <span className="rounded-full bg-white border border-sky-200 px-2.5 py-0.5 text-[11px] font-semibold text-sky-800 group-open:bg-sky-700 group-open:text-white transition-colors">
+                    {analisis.fichaIdentidadVisual.detallesPorImagen.length}{" "}
+                    ref(s) ▾
+                  </span>
+                </div>
               </summary>
 
-              <div className="mt-3 pt-3 border-t border-sky-200/70 space-y-2">
-                <p className="text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-                  {analisis.fichaIdentidadVisual.resumenVisual}
-                </p>
-                {analisis.fichaIdentidadVisual.detallesPorImagen.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {analisis.fichaIdentidadVisual.detallesPorImagen.map(
-                      (detalle, idx) => (
-                        <span
-                          key={idx}
-                          className="rounded-lg bg-white border border-sky-200 px-2.5 py-0.5 text-[11px] font-medium text-sky-900"
-                        >
-                          {detalle}
-                        </span>
+              <div className="mt-3 pt-3 border-t border-sky-200/70 space-y-3">
+                {analisis.fichaIdentidadVisual.personajesSeparados &&
+                analisis.fichaIdentidadVisual.personajesSeparados.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {analisis.fichaIdentidadVisual.personajesSeparados.map(
+                      (personaje, idxP) => {
+                        const rasgosLimpios = limpiarTextoFichaTecnica(
+                          personaje.identidadFisicaInmutable
+                        );
+                        const vestuarioLimpio = limpiarTextoFichaTecnica(
+                          personaje.vestuarioOriginalFoto
+                        );
+
+                        return (
+                          <div
+                            key={`${personaje.nombreArchivo}-${idxP}`}
+                            className="rounded-2xl bg-white border border-sky-200 p-3.5 space-y-3 shadow-xs flex flex-col justify-between"
+                          >
+                            <div className="flex items-center gap-3 border-b border-slate-100 pb-2.5">
+                              {personaje.urlImagen ? (
+                                <img
+                                  src={personaje.urlImagen}
+                                  alt={personaje.nombreArchivo}
+                                  className="h-14 w-14 rounded-xl object-cover border border-slate-200 shrink-0 bg-slate-100"
+                                />
+                              ) : (
+                                <div className="h-14 w-14 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center text-xl shrink-0">
+                                  👤
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <span className="inline-block rounded-full bg-sky-100 border border-sky-200 px-2 py-0.5 text-[10px] font-bold text-sky-900">
+                                  Ficha Técnica #{idxP + 1}
+                                </span>
+                                <h4 className="text-sm font-bold text-slate-900 truncate mt-0.5">
+                                  {personaje.nombreArchivo}
+                                </h4>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <div className="rounded-xl bg-emerald-50/70 border border-emerald-200/80 p-2.5 text-xs text-slate-800 leading-relaxed">
+                                <strong className="text-emerald-950 block mb-0.5">
+                                  👤 Apariencia y Rasgos Físicos (Fijos en todo el video):
+                                </strong>
+                                {rasgosLimpios}
+                              </div>
+
+                              <div className="rounded-xl bg-amber-50/70 border border-amber-200/80 p-2.5 text-xs text-slate-800 leading-relaxed">
+                                <strong className="text-amber-950 block mb-0.5">
+                                  👕 Ropa y Calzado en la Foto:
+                                </strong>
+                                {vestuarioLimpio}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-xs sm:text-sm text-slate-700 leading-relaxed">
+                    {renderizarFichaVisualLimpia(
+                      limpiarTextoFichaTecnica(
+                        analisis.fichaIdentidadVisual.resumenVisual
                       )
                     )}
                   </div>
@@ -190,13 +409,31 @@ export function PanelClarificacionDirector({
               </summary>
 
               <div className="mt-3 pt-3 border-t border-violet-200/70 space-y-3">
-                <div className="flex flex-wrap items-center gap-2 text-[11px] text-violet-900">
-                  <span className="rounded-full bg-white border border-violet-200 px-2.5 py-0.5 font-semibold">
-                    Idioma detectado: {transcripcion.idiomaDetectado}
-                  </span>
-                  <span className="rounded-full bg-white border border-violet-200 px-2.5 py-0.5">
-                    {transcripcion.ritmoYTono}
-                  </span>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-violet-900">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-white border border-violet-200 px-2.5 py-0.5 font-semibold">
+                      Idioma detectado: {transcripcion.idiomaDetectado}
+                    </span>
+                    <span className="rounded-full bg-white border border-violet-200 px-2.5 py-0.5">
+                      {transcripcion.ritmoYTono}
+                    </span>
+                    {transcripcion.duracionTotalSegundos && (
+                      <span className="rounded-full bg-violet-100 border border-violet-300 px-2.5 py-0.5 font-bold text-violet-900">
+                        Duración real: {transcripcion.duracionTotalSegundos}s
+                      </span>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={recalculandoAudioUrl === transcripcion.urlArchivo}
+                    onClick={() => recalcularSegmentosCompletosAudio(transcripcion)}
+                    className="rounded-full border border-violet-300 bg-white hover:bg-violet-100 px-3 py-1 text-[11px] font-bold text-violet-900 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {recalculandoAudioUrl === transcripcion.urlArchivo
+                      ? "⏳ Recalculando hasta el final..."
+                      : "🔄 Recalcular marcas de tiempo completas"}
+                  </button>
                 </div>
 
                 <div className="rounded-xl bg-white/90 border border-violet-100 p-3 text-xs sm:text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">
@@ -206,10 +443,14 @@ export function PanelClarificacionDirector({
                 {transcripcion.segmentosConTiempo.length > 0 && (
                   <div className="space-y-1.5">
                     <p className="text-[11px] font-bold uppercase tracking-wider text-violet-800">
-                      Marcas de tiempo detectadas por fal-ai/whisper (
-                      {transcripcion.segmentosConTiempo.length} segmentos):
+                      Marcas de tiempo completas (
+                      {transcripcion.segmentosConTiempo.length} segmentos · hasta{" "}
+                      {transcripcion.segmentosConTiempo[
+                        transcripcion.segmentosConTiempo.length - 1
+                      ]?.finSeg.toFixed(1)}
+                      s):
                     </p>
-                    <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
+                    <div className="flex flex-wrap gap-1.5 max-h-56 overflow-y-auto pr-1">
                       {transcripcion.segmentosConTiempo.map((seg, idx) => (
                         <span
                           key={idx}
@@ -342,13 +583,23 @@ export function PanelClarificacionDirector({
       {/* 4. Confirmación cuando el proyecto ya está en "listo_para_guion" (0 preguntas o ya confirmado) */}
       {estadoActual === "listo_para_guion" && (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-5 space-y-3">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h4 className="text-sm sm:text-base font-bold text-emerald-950">
               ✅ Dirección Creativa Completa · Estado: listo_para_guion
             </h4>
-            <span className="rounded-full bg-emerald-600 text-white px-3 py-1 text-[11px] font-bold">
-              Listo para Paso 3
-            </span>
+            {alPasarAlPaso3Guion ? (
+              <button
+                type="button"
+                onClick={alPasarAlPaso3Guion}
+                className="rounded-full bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 text-xs font-bold shadow-2xs transition-colors cursor-pointer"
+              >
+                🎬 Pasar al Paso 3 (Generar Guion) →
+              </button>
+            ) : (
+              <span className="rounded-full bg-emerald-600 text-white px-3 py-1 text-[11px] font-bold">
+                Listo para Paso 3
+              </span>
+            )}
           </div>
           <p className="text-xs sm:text-sm text-emerald-900">
             {analisis.resumenDireccionCreativa}

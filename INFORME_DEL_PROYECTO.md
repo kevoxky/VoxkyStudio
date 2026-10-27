@@ -45,6 +45,67 @@ Imagina que entras a una agencia de cine real:
 ---
 
 ## (d) ¿Qué se ha hecho hasta ahora? (Diario de sesiones)
+### Sesión del 26 de octubre de 2026 (Biblioteca Global Anti-Duplicados SHA-256 y Vestuario Contextual por Escenario)
+- **Biblioteca Global de Activos Reutilizables (`biblioteca_activos`):**
+  - Antes de subir cualquier imagen, producto o canción a la nube, el sistema calcula su **huella digital única (`SHA-256`)** en el navegador.
+  - Si subes de nuevo a *Leo*, *Mía* o una *Doctora* que ya habías subido antes, el sistema lo detecta al instante, **no vuelve a subir ni duplicar el archivo**, y reutiliza su dirección web, su ficha de identidad y sus Láminas 360° ya creadas (ahorrando tiempo y dinero).
+  - Al pulsar el botón `+` en la Mesa de Entrada, ahora puedes elegir entre **"💻 Subir archivo nuevo desde mi equipo"** o **"📚 Elegir de Mi Biblioteca (Personajes y Productos guardados)"** con la insignia **"✨ Lámina 360° lista (Ahorro activo)"**.
+- **Separación de Identidad Física Inmutable vs. Armario de Vestuario por Lugar:**
+  - El Agente Productor separa estrictamente el **Bloque A (`identidadFisicaInmutable`: edad, rostro, ojos, piel, cabello y complexión que jamás cambian)** del **Bloque B (`vestuarioOriginalFoto`: la ropa que lleva en la foto subida, como una bata médica)**.
+  - Si tu historia mantiene la ropa original (como un videoclip con personajes de ropa icónica), todas las escenas usan `vestuario_base`.
+  - Si tu historia lleva al personaje por distintos lugares donde la ropa de la foto no tendría sentido (por ejemplo, una doctora que va del **consultorio** al **gimnasio**, luego a la **playa** y a **casa**), el Guionista crea un **Armario de Vestuario (`armarioVestuarios`)** con atuendos fijos para cada lugar (`vestuario_base`, `vestuario_gimnasio`, `vestuario_playa`, `vestuario_casa`).
+  - **Consistencia total por lugar:** Todas las escenas que ocurran en el gimnasio (ej. Escenas 3, 4 y 9) reciben exactamente la misma ropa deportiva y la Lámina 360° de ese vestuario, manteniendo el mismo rostro en todo el video.
+
+### Sesión del 26 de octubre de 2026 (Modelos Duales Inteligentes: Text-to-Image / Image-to-Image)
+- **Modelos Híbridos Autoadaptables:** Para evitar que los modelos fallen por falta de referencias o ignoren las fotos del usuario, todo el catálogo de imágenes ahora cuenta con soporte dual:
+  - Si una escena o toma tiene personajes o láminas de referencia: el sistema utiliza automáticamente el endpoint de edición (`/edit` o `/kontext`) mirando las fotos reales en `image_urls`.
+  - Si una escena es una toma libre (como un paisaje, un cielo o una toma ambiental sin personajes): conmuta automáticamente al motor de Texto-a-Imagen puro sin provocar errores de parámetros.
+- **Catálogo Oficial Unificado:** Nano Banana 2.1, Nano Banana Pro 4K, FLUX Kontext Pro, FLUX Kontext Dev, Recraft V3 Design y GPT Image 2 High configurados en sus parejas oficiales de generación y edición.
+
+### Sesión del 26 de octubre de 2026 (Experiencia Wizard por Pantallas y Modelos Oficiales fal.ai)
+- **Cero Scroll Infinito (Navegación por Pantallas Independientes):** Se transformó la Sala de Estudio en una experiencia interactiva tipo asistente (Wizard). Ya no se apilan todos los pasos uno debajo del otro; ahora ves únicamente la pantalla en la que estás trabajando.
+- **Barra Superior de Etapas (Stepper Interactivo):**
+  1. 🔍 **Paso 1: Análisis y Clarificación:** Muestra la ficha de visión, transcripción y preguntas del director.
+  2. 🎬 **Paso 2: Guion y Escaleta:** Muestra la línea de tiempo interactiva y las escenas sincronizadas.
+  3. 🎭 **Paso 3: Láminas 360° y Estilo:** Muestra el selector de estilo visual y las hojas de consistencia técnica.
+  4. 🖼️ **Paso 4: Storyboard Visual:** Muestra la tira de láminas activas arriba y los cuadros de imagen por escena abajo.
+  5. 🎥 **Paso 5: Audio, Video y Descarga:** Prepara la animación y renderizado final.
+- **Cabecera Limpia y Botón "📋 Ver idea y archivos":** Al hacer clic, se abre una ventana modal flotante para consultar en cualquier momento lo que escribiste y tus archivos adjuntos sin ocupar espacio fijo en pantalla.
+- **Auditoría de Modelos con el Servidor fal.ai:** Se actualizaron los modelos oficiales de video con precios reales (`Kling v3 Pro`, `Wan 3.0 Prime`, `MiniMax H3 Max` y `ByteDance Seedance 2.5`), eliminando motores deprecados.
+
+### Sesión del 26 de octubre de 2026 (Paso 4: Enrutador Imagen-a-Imagen, 9 Estilos Artísticos y Conversión Visual con Consistencia)
+- **Enrutador Obligatorio Imagen-a-Imagen (`obtenerEndpointConReferencia`):**
+  - Se corrigió el problema por el cual el motor usaba modelos solo de texto (`google/nano-banana-2.1`) sin ver las fotos del usuario.
+  - Ahora cualquier generación o lámina con fotos de referencia se dirige obligatoriamente a los endpoints de edición que reciben las imágenes reales (`google/nano-banana-2.1/edit`, `fal-ai/nano-banana-pro/edit` y `fal-ai/flux-pro/kontext`).
+  - Se eliminó cualquier envío de nombres de archivos sueltos como texto; siempre se envían las direcciones web reales de las fotos en Firebase Storage o fal.storage (`image_urls`).
+- **Catálogo Oficial de 9 Estilos Visuales:**
+  - Se crearon 9 opciones artísticas completas: *🎨 Mantener estilo de la foto*, *🧸 3D Pixar / Animación Cine*, *📺 Cartoon 2D / Animación Clásica*, *🧶 Plastilina / Stop-Motion (Claymation)*, *🎬 Realista Cinematográfico 4K*, *🌸 Anime / Ilustración Japonesa*, *💥 Cómic / Novela Gráfica*, *🧱 Mundo de Bloques / Juguete 3D*, y *🖌️ Cuento Ilustrado / Acuarela*.
+- **Selector de Estilo Visual en Mesa de Entrada y en Vivo en la Sala de Estudio:**
+  - Agregado en la barra inferior de la pantalla de inicio y como selector interactivo justo arriba del botón de generar láminas en `/estudio/[id]`.
+  - Permite cambiar de idea estética (por ejemplo de *Realista* a *Plastilina*) en el mismo proyecto sin tener que crearlo de nuevo.
+- **Regla de Oro: Identidad y Ropa Intactas + Transformación Artística:**
+  - Se borraron las palabras fijas *"photorealistic"* que deformaban personajes animados a adultos reales.
+  - La inteligencia artificial ahora tiene la orden estricta de respetar al 100% el rostro, edad, peinado, accesorios y vestimenta exacta de la foto (por ejemplo, si viste una playera a rayas o un disfraz), transformando únicamente el estilo artístico (textura de plastilina, trazos 2D, iluminación Pixar, etc.).
+
+### Sesión del 26 de octubre de 2026 (Paso 4: Láminas de Consistencia 360° y Generación Visual del Storyboard)
+- **Línea de Tiempo 100% Flexible y Sin Límites Fijos:** Se eliminó cualquier número fijo como 125 segundos del planificador de tomas y de la interfaz. Ahora cualquier canción o duración elegida (15 segundos, 4 minutos o lo que dure) se adapta sin cortes.
+- **Historial de Proyectos en la Portada (`HistorialProyectos.tsx`):** Añadido en la página de inicio para que tus proyectos anteriores nunca desaparezcan, permitiendo volver a entrar a la sala con un clic o borrarlos de la base de datos de forma segura.
+- **Láminas de Consistencia 360° de Personajes y Productos (`generador_laminas_360.ts`):** Antes de crear las escenas, cada imagen que subas se convierte en una "hoja de modelo" técnica sobre fondo gris neutro:
+  - Si es una persona o personaje: muestra su cara en primer plano ultra nítido, los giros de su cabeza en diferentes ángulos y su cuerpo completo en 360° caminando y de espaldas.
+  - Si es un producto: muestra el envase publicitario perfecto, sus etiquetas y texturas, y sus giros en 360°.
+  - Todas estas láminas se guardan de forma permanente en Firebase Storage (`proyectos/{id}/laminas_360/`).
+- **Generación Visual de Escenas con Identidad (`generador_imagenes_escenas.ts`):** Cada toma del guion se genera en paralelo usando el modelo que elegiste (`recraft-v3`, `flux-pro`, etc.) inyectando las láminas 360° para que el personaje o producto se vea idéntico en cada escena sin deformarse.
+- **Panel de Estudio Paso 4 (`PanelEstudioVisualPaso4.tsx`):**
+  - Galería visual con zoom para ver las láminas 360° y botón para regenerarlas.
+  - Storyboard con las fotos de cada escena generada, estado en tiempo real y botón `"🎨 Regenerar esta toma"` por si quieres cambiar una imagen específica.
+  - Botón de aprobación final para pasar a Sonido y Video (Pasos 5 y 6).
+
+### Sesión del 24 de octubre de 2026 (Paso 3: Reconciliador 100% de Canciones, Agente Guionista y Timeline de Escenas)
+- **Cobertura del 100% de la canción sin recortes (`reconciliador_letra_whisper.ts`):** Se eliminó el tope de 25 segmentos de `fal-ai/whisper`, se conservaron los segmentos con tiempo final abierto `[inicio, null]` y se creó `reconciliarLetraYSegmentosCompletos`, que detecta si al final del texto completo quedaron frases sin marca de tiempo (como *"Manos a la panza... Adiós monstruo"* entre el segundo `90.8s` y el `125.0s`) y las reparte proporcionalmente hasta el final real del audio.
+- **Medición exacta de duración y botón de recálculo:** Al adjuntar una canción o video en la Mesa de Entrada, el navegador mide su duración exacta en segundos (`duracionSegundos`). Además, en proyectos ya creados puedes pulsar **"🔄 Recalcular segmentos completos"** dentro del bloque de letra para actualizar los tiempos al instante sin volver a subir archivos.
+- **Limpieza visual de la Ficha de Identidad:** Se eliminaron los asteriscos sueltos de Markdown (`**`) convirtiéndolos en negritas limpias y agradables de leer.
+- **Agente Guionista Cinematográfico (`/api/agentes/generar-guion`) y Timeline (`PanelGuionTimeline.tsx`):** Al pasar a `listo_para_guion`, el sistema planifica todas las tomas consecutivas desde `0.0s` hasta el último segundo (ej. `125.0s`, entre 22 y 26 escenas de máximo 5-6 segundos sin huecos), muestra arriba una **Línea de Tiempo horizontal interactiva** y abajo las **Tarjetas de Escena editables** listas para aprobar y pasar al **Paso 4 (`listo_para_imagenes`)**.
+
 ### Sesión del 24 de octubre de 2026 (Blindaje de Subida de Canciones/Videos, Respaldo fal.ai y Acordeón de Letra)
 - **Subida blindada con respaldo automático (`fal.storage.upload`):** Se ajustaron los tiempos de espera en `subir_imagenes_referencia.ts` (máximo 45s) y se conectó el almacenamiento seguro de `fal.ai` como salvavidas automático si Firebase Storage tarda o rechaza un `.mp3`, `.wav` o `.mp4` por reglas o CORS.
 - **Avance real paso a paso en `MesaDeEntrada.tsx`:** Ahora ves en vivo *"Subiendo archivos multimedia (1 de 3)..."*, *"Guardando proyecto en la base de datos..."* y *"Entrando a la sala de estudio..."*, protegido con `try / catch / finally` para que nunca se quede congelado.
@@ -56,6 +117,20 @@ Imagina que entras a una agencia de cine real:
 - Se creó el **Agente Productor Ejecutivo** que clasifica automáticamente cada proyecto en una de las **5 líneas de producción** (Videoclip Musical, Publicidad Comercial, Contenido Redes/Influencer, Traducción/Doblaje de Video o Cine/Serie/Storyboard).
 - Se dotó al agente de **Ojos (`fal-ai/any-llm/vision`)** para describir tus fotos y **Oídos (`fal-ai/whisper`)** para transcribir la letra de tus canciones o diálogos con marcas de tiempo.
 - Se programó la **Regla de Clarificación Elástica**: si ya todo está claro (o si se conecta desde un Widget externo con `modoSilencioso: true`), hace **0 preguntas** y pasa directo a `listo_para_guion`; si faltan detalles artísticos, genera solo las preguntas necesarias con botones rápidos y opción de *"Saltar preguntas (Que el Director decida por mí)"*.
+
+### Sesión del 27 de octubre de 2026 (Sistema de Vestuario 100% Universal, Ver/Editar el Prompt de cada imagen y Eliminar imágenes)
+- **Sistema de Vestuario 100% General para Cualquier Historia o Personaje:**
+  - Se quitó por completo la palabra fija *"Consultorio"*: ahora el atuendo principal se llama siempre **"Ropa original de la foto de referencia"** (`vestuario_base`).
+  - Si en tu idea pides no cambiar la ropa (por ejemplo: *"no les puede cambiar la ropa"*), el sistema respeta tu orden y usa únicamente la ropa original en todo el video.
+  - Si tu historia pasa por varios lugares o profesiones (un chef en la cocina, un explorador en la nieve, unos niños en la escuela, alguien haciendo ejercicio o en pijama), el Agente Guionista crea los vestuarios a medida para esa historia. Además, en el Paso 3 tienes el botón **"➕ Añadir vestuario para otro escenario"** para escribir tú mismo cualquier lugar y ropa que quieras agregar, y **"🗑️ Quitar vestuario"** para descartar cualquiera que no necesites.
+- **Botón `📝 Ver / Editar Prompt` en cada imagen (Láminas 360° y Storyboard):** Ahora puedes abrir una pestaña en cualquier tarjeta para ver exactamente qué instrucción (prompt) se le envió a la inteligencia artificial, modificar el texto a tu gusto, elegir otro modelo ahí mismo (por ejemplo pasar de FLUX a Seedream 5.0 Pro o Nano Banana 2.1) y pulsar **"✨ Regenerar con este Prompt y Modelo"**.
+- **Botón `🗑️ Eliminar` (con limpieza de Biblioteca):** Si una imagen generada o reutilizada no te gusta, puedes pulsar **"🗑️ Eliminar"**. Esto la quita del proyecto y también la borra de la memoria de tu Biblioteca Global para que no vuelva a cargarse sola.
+
+### Sesión del 26 de octubre de 2026 (Modelos ByteDance Seedream, Botón ⚙️ Ajustes, Biblioteca SHA-256 y Vestuario Contextual)
+- **Modelos de Imagen ByteDance Seedream (Duales):** Se agregaron al selector de la Mesa de Entrada y a la Sala de Estudio los 4 modelos oficiales de ByteDance (**Seedream 5.0 Pro**, **Seedream 5.0 Lite**, **Seedream 5.0 Flash** y **Seedream 4.5**). Todos funcionan en modo Dual: si hay fotos o Láminas 360° usan su versión `/edit` para respetar el rostro y ropa; si una escena no lleva referencias, crean desde texto.
+- **Botón `⚙️ Ajustes` en la Sala de Estudio (`/estudio/[id]`):** Ahora tienes un botón de engranaje arriba a la derecha dentro del estudio para cambiar en cualquier momento de modelo de imagen (ej. pasar de Nano Banana a Seedream 5.0 Pro o Lite), modelo de video, estilo visual, formato de pantalla o idioma sin tener que salir ni empezar de cero.
+- **Fichas Técnicas Individuales con Foto:** En el Paso 1 del estudio, cada personaje subido (como Leo y Mía) muestra su propia tarjeta limpia con su foto en miniatura, separando su **Apariencia y Rasgos Físicos (Fijos)** de su **Ropa y Calzado en la Foto (Vestuario Base)**, más un botón *"🔄 Actualizar fichas técnicas"*.
+- **Biblioteca Global Anti-Duplicados y Armario de Vestuario:** Tus personajes y productos se guardan una sola vez gracias a su huella digital (`SHA-256`) para reutilizar gratis sus Láminas 360°, y el Guionista adapta lógicamente la ropa según el lugar de la escena (consultorio, gimnasio, playa, casa) manteniendo el mismo rostro.
 
 ### Sesión del 23 de octubre de 2026 (Perfiles Rápido/Pro/Máximo con precios reales en USD y Tooltips)
 - Se consultaron en directo los precios oficiales mediante el MCP de `fal.ai` y se agregaron las fichas técnicas de cada modelo de imagen y video (calidad, precio real por imagen o segundo, y velocidad).
